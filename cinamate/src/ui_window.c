@@ -20,7 +20,13 @@ static struct {
     bool show_demo;
     bool dock_setup_done;
 
-} window_state = {0};
+    // Canvas view
+    float canvas_zoom;
+    ImVec2 canvas_pan;
+
+} window_state = {
+    .canvas_zoom = 1.0f,
+};
 
 // Pack RGBA into ImU32 (ImGui's ABGR byte order)
 #define INAMATE_COL32(r,g,b,a) (((ImU32)(a)<<24) | ((ImU32)(b)<<16) | ((ImU32)(g)<<8) | ((ImU32)(r)))
@@ -33,39 +39,35 @@ static ImU32 hex_to_imu32(const char *hex) {
     return INAMATE_COL32(r, g, b, 255);
 }
 
-// Apply affine transform [a,b,c,d,e,f] to a point, offset by canvas origin
-static ImVec2 xform_pt(const float t[6], float x, float y, ImVec2 origin) {
+// Apply affine transform [a,b,c,d,e,f] to a point, with view zoom and origin offset
+static ImVec2 xform_pt(const float t[6], float x, float y, ImVec2 origin, float zoom) {
     return (ImVec2){
-        origin.x + t[0]*x + t[2]*y + t[4],
-        origin.y + t[1]*x + t[3]*y + t[5],
+        origin.x + (t[0]*x + t[2]*y + t[4]) * zoom,
+        origin.y + (t[1]*x + t[3]*y + t[5]) * zoom,
     };
 }
 
-// Render a single path draw command to an ImDrawList
-static void draw_path_cmd(ImDrawList *dl, InDrawCmd *cmd, ImVec2 origin) {
-    float cx = 0, cy = 0; // current point
-
-    ImDrawList_PathClear(dl);
-
+// Walk path commands into the ImDrawList path buffer
+static void walk_path(ImDrawList *dl, InDrawCmd *cmd, ImVec2 origin, float zoom) {
+    float cx = 0, cy = 0;
     for (int j = 0; j < cmd->path_len; j++) {
         InPathCmd *pc = &cmd->path[j];
         switch (pc->type) {
         case 'M':
-            // MoveTo starts a new sub-path
             ImDrawList_PathClear(dl);
             cx = pc->coords[0]; cy = pc->coords[1];
-            ImDrawList_PathLineTo(dl, xform_pt(cmd->transform, cx, cy, origin));
+            ImDrawList_PathLineTo(dl, xform_pt(cmd->transform, cx, cy, origin, zoom));
             break;
         case 'L':
             cx = pc->coords[0]; cy = pc->coords[1];
-            ImDrawList_PathLineTo(dl, xform_pt(cmd->transform, cx, cy, origin));
+            ImDrawList_PathLineTo(dl, xform_pt(cmd->transform, cx, cy, origin, zoom));
             break;
         case 'Q': {
             float x1 = pc->coords[0], y1 = pc->coords[1];
             float x2 = pc->coords[2], y2 = pc->coords[3];
             ImDrawList_PathBezierQuadraticCurveTo(dl,
-                xform_pt(cmd->transform, x1, y1, origin),
-                xform_pt(cmd->transform, x2, y2, origin), 0);
+                xform_pt(cmd->transform, x1, y1, origin, zoom),
+                xform_pt(cmd->transform, x2, y2, origin, zoom), 0);
             cx = x2; cy = y2;
             break;
         }
@@ -74,20 +76,25 @@ static void draw_path_cmd(ImDrawList *dl, InDrawCmd *cmd, ImVec2 origin) {
             float x2 = pc->coords[2], y2 = pc->coords[3];
             float x3 = pc->coords[4], y3 = pc->coords[5];
             ImDrawList_PathBezierCubicCurveTo(dl,
-                xform_pt(cmd->transform, x1, y1, origin),
-                xform_pt(cmd->transform, x2, y2, origin),
-                xform_pt(cmd->transform, x3, y3, origin), 0);
+                xform_pt(cmd->transform, x1, y1, origin, zoom),
+                xform_pt(cmd->transform, x2, y2, origin, zoom),
+                xform_pt(cmd->transform, x3, y3, origin, zoom), 0);
             cx = x3; cy = y3;
             break;
         }
         case 'Z':
-            // Close path — ImGui path is implicitly closed on fill/stroke
             break;
         }
     }
+}
+
+// Render a single path draw command to an ImDrawList
+static void draw_path_cmd(ImDrawList *dl, InDrawCmd *cmd, ImVec2 origin, float zoom) {
+    ImDrawList_PathClear(dl);
 
     // Fill
     if (cmd->fill[0] == '#') {
+        walk_path(dl, cmd, origin, zoom);
         ImU32 col = hex_to_imu32(cmd->fill);
         if (cmd->opacity > 0 && cmd->opacity < 1.0f) {
             col = (col & 0x00FFFFFF) | ((ImU32)(cmd->opacity * 255) << 24);
@@ -95,47 +102,12 @@ static void draw_path_cmd(ImDrawList *dl, InDrawCmd *cmd, ImVec2 origin) {
         ImDrawList_PathFillConcave(dl, col);
     }
 
-    // Stroke (need to re-walk path since fill consumed it)
+    // Stroke (re-walk path since fill consumed it)
     if (cmd->stroke[0] == '#') {
         ImDrawList_PathClear(dl);
-        cx = 0; cy = 0;
-        for (int j = 0; j < cmd->path_len; j++) {
-            InPathCmd *pc = &cmd->path[j];
-            switch (pc->type) {
-            case 'M':
-                ImDrawList_PathClear(dl);
-                cx = pc->coords[0]; cy = pc->coords[1];
-                ImDrawList_PathLineTo(dl, xform_pt(cmd->transform, cx, cy, origin));
-                break;
-            case 'L':
-                cx = pc->coords[0]; cy = pc->coords[1];
-                ImDrawList_PathLineTo(dl, xform_pt(cmd->transform, cx, cy, origin));
-                break;
-            case 'Q': {
-                float x1 = pc->coords[0], y1 = pc->coords[1];
-                float x2 = pc->coords[2], y2 = pc->coords[3];
-                ImDrawList_PathBezierQuadraticCurveTo(dl,
-                    xform_pt(cmd->transform, x1, y1, origin),
-                    xform_pt(cmd->transform, x2, y2, origin), 0);
-                cx = x2; cy = y2;
-                break;
-            }
-            case 'C': {
-                float x1 = pc->coords[0], y1 = pc->coords[1];
-                float x2 = pc->coords[2], y2 = pc->coords[3];
-                float x3 = pc->coords[4], y3 = pc->coords[5];
-                ImDrawList_PathBezierCubicCurveTo(dl,
-                    xform_pt(cmd->transform, x1, y1, origin),
-                    xform_pt(cmd->transform, x2, y2, origin),
-                    xform_pt(cmd->transform, x3, y3, origin), 0);
-                cx = x3; cy = y3;
-                break;
-            }
-            case 'Z': break;
-            }
-        }
+        walk_path(dl, cmd, origin, zoom);
         ImU32 scol = hex_to_imu32(cmd->stroke);
-        float sw = cmd->stroke_width > 0 ? cmd->stroke_width : 1.0f;
+        float sw = (cmd->stroke_width > 0 ? cmd->stroke_width : 1.0f) * zoom;
         ImDrawList_PathStroke(dl, scol, ImDrawFlags_Closed, sw);
     }
 }
@@ -233,11 +205,17 @@ void ui_window(void)
                 ui_reset_layout(dockspace_id);
             }
             igSeparator();
-            if (igMenuItem_Bool("Zoom In", "", false, true)) {
+            if (igMenuItem_Bool("Zoom In", "Cmd+=", false, true)) {
+                window_state.canvas_zoom *= 1.25f;
+                if (window_state.canvas_zoom > 20.0f) window_state.canvas_zoom = 20.0f;
             }
-            if (igMenuItem_Bool("Zoom Out", "", false, true)) {
+            if (igMenuItem_Bool("Zoom Out", "Cmd+-", false, true)) {
+                window_state.canvas_zoom *= 0.8f;
+                if (window_state.canvas_zoom < 0.05f) window_state.canvas_zoom = 0.05f;
             }
-            if (igMenuItem_Bool("Reset Zoom", "", false, true)) {
+            if (igMenuItem_Bool("Reset Zoom", "Cmd+0", false, true)) {
+                window_state.canvas_zoom = 1.0f;
+                window_state.canvas_pan = (ImVec2){0, 0};
             }
             if (igMenuItem_Bool("Fit to Screen", "", false, true)) {
             }
@@ -273,20 +251,58 @@ void ui_window(void)
         window_state.dock_setup_done = true;
     }
 
-    // Draw Window
+    // Canvas Window
     if (window_state.show_canvas) {
         if (igBegin("Canvas", &window_state.show_canvas, ImGuiWindowFlags_None)) {
+            ImVec2 cursor_origin;
+            igGetCursorScreenPos(&cursor_origin);
+
+            // Input: zoom and pan
+            if (igIsWindowHovered(ImGuiHoveredFlags_None)) {
+                ImGuiIO *io = igGetIO_Nil();
+
+                // Mouse wheel → zoom toward cursor
+                if (io->MouseWheel != 0) {
+                    float old_zoom = window_state.canvas_zoom;
+                    float factor = (io->MouseWheel > 0) ? 1.1f : 1.0f / 1.1f;
+                    window_state.canvas_zoom *= factor;
+                    if (window_state.canvas_zoom < 0.05f) window_state.canvas_zoom = 0.05f;
+                    if (window_state.canvas_zoom > 20.0f) window_state.canvas_zoom = 20.0f;
+
+                    // Zoom toward mouse position
+                    float ratio = 1.0f - window_state.canvas_zoom / old_zoom;
+                    window_state.canvas_pan.x += (io->MousePos.x - cursor_origin.x - window_state.canvas_pan.x) * ratio;
+                    window_state.canvas_pan.y += (io->MousePos.y - cursor_origin.y - window_state.canvas_pan.y) * ratio;
+                }
+
+                // Middle-mouse drag → pan
+                if (igIsMouseDragging(ImGuiMouseButton_Middle, 0)) {
+                    ImVec2 delta;
+                    igGetMouseDragDelta(&delta, ImGuiMouseButton_Middle, 0);
+                    igResetMouseDragDelta(ImGuiMouseButton_Middle);
+                    window_state.canvas_pan.x += delta.x;
+                    window_state.canvas_pan.y += delta.y;
+                }
+            }
+
+            float zoom = window_state.canvas_zoom;
+            ImVec2 view_origin = {
+                cursor_origin.x + window_state.canvas_pan.x,
+                cursor_origin.y + window_state.canvas_pan.y,
+            };
+
             if (GoInamateIsDocLoaded()) {
                 ImDrawList *dl = igGetWindowDrawList();
-                ImVec2 origin;
-                igGetCursorScreenPos(&origin);
 
                 InDrawFrame frame = GoInamateEngineRenderFrame();
 
                 // Draw scene background and clip to scene bounds
                 if (frame.scene_width > 0 && frame.scene_height > 0) {
-                    ImVec2 bg_min = origin;
-                    ImVec2 bg_max = {origin.x + frame.scene_width, origin.y + frame.scene_height};
+                    ImVec2 bg_min = view_origin;
+                    ImVec2 bg_max = {
+                        view_origin.x + frame.scene_width * zoom,
+                        view_origin.y + frame.scene_height * zoom,
+                    };
 
                     if (frame.background[0] == '#') {
                         ImDrawList_AddRectFilled(dl, bg_min, bg_max, hex_to_imu32(frame.background), 0, 0);
@@ -298,7 +314,7 @@ void ui_window(void)
                 for (int i = 0; i < frame.count; i++) {
                     InDrawCmd *cmd = &frame.commands[i];
                     if (cmd->op == 0 && cmd->path_len > 0) {
-                        draw_path_cmd(dl, cmd, origin);
+                        draw_path_cmd(dl, cmd, view_origin, zoom);
                     }
                 }
 
