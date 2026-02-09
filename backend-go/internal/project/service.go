@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/inamate/inamate/backend-go/document"
 	"github.com/inamate/inamate/backend-go/internal/db/dbgen"
-	"github.com/inamate/inamate/backend-go/internal/document"
 	"github.com/inamate/inamate/backend-go/internal/typeid"
 )
 

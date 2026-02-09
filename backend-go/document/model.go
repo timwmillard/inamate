@@ -42,7 +42,6 @@ const (
 	ObjectTypeVectorPath   ObjectType = "VectorPath"
 	ObjectTypeRasterImage  ObjectType = "RasterImage"
 	ObjectTypeSymbol       ObjectType = "Symbol"
-	ObjectTypeText         ObjectType = "Text"
 )
 
 type Transform struct {

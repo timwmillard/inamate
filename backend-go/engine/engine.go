@@ -3,7 +3,7 @@ package engine
 import (
 	"encoding/json"
 
-	"github.com/inamate/inamate/backend-go/internal/document"
+	"github.com/inamate/inamate/backend-go/document"
 )
 
 // Engine is the main animation engine that owns the document and scene graph state.
@@ -232,10 +232,10 @@ func (e *Engine) Tick() string {
 
 // --- Queries (frontend ← backend) ---
 
-// Render evaluates the scene graph and returns draw commands as JSON.
-func (e *Engine) Render() string {
+// RenderCommands evaluates the scene graph and returns draw commands as a slice.
+func (e *Engine) RenderCommands() []DrawCommand {
 	if e.doc == nil {
-		return "[]"
+		return nil
 	}
 
 	// Rebuild scene graph if dirty
@@ -251,10 +251,15 @@ func (e *Engine) Render() string {
 		e.dirty = false
 	}
 
-	// Compile to draw commands
-	commands := CompileDrawCommands(e.sceneGraph)
+	return CompileDrawCommands(e.sceneGraph)
+}
 
-	// Serialize to JSON
+// Render evaluates the scene graph and returns draw commands as JSON.
+func (e *Engine) Render() string {
+	commands := e.RenderCommands()
+	if commands == nil {
+		return "[]"
+	}
 	result, _ := DrawCommandsToJSON(commands)
 	return result
 }
@@ -275,6 +280,29 @@ func (e *Engine) GetSelectionBounds() string {
 	}
 	bounds := GetSelectionBounds(e.sceneGraph, e.selection)
 	return RectToJSON(bounds)
+}
+
+// SceneInfo holds scene metadata for direct access (no JSON).
+type SceneInfo struct {
+	Width      int
+	Height     int
+	Background string
+}
+
+// GetSceneInfo returns the current scene's dimensions and background color.
+func (e *Engine) GetSceneInfo() SceneInfo {
+	if e.doc == nil || e.sceneID == "" {
+		return SceneInfo{}
+	}
+	scene, ok := e.doc.Scenes[e.sceneID]
+	if !ok {
+		return SceneInfo{}
+	}
+	return SceneInfo{
+		Width:      scene.Width,
+		Height:     scene.Height,
+		Background: scene.Background,
+	}
 }
 
 // GetScene returns the current scene metadata as JSON.

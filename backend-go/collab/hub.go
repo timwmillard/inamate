@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/inamate/inamate/backend-go/internal/document"
+	"github.com/inamate/inamate/backend-go/document"
 )
 
 type Room struct {

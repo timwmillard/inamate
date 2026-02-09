@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/inamate/inamate/backend-go/internal/document"
+	"github.com/inamate/inamate/backend-go/document"
 )
 
 // PropertyOverrides holds interpolated numeric property values from keyframe evaluation.

@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"syscall/js"
 
-	"github.com/inamate/inamate/backend-go/internal/document"
-	"github.com/inamate/inamate/backend-go/internal/engine"
+	"github.com/inamate/inamate/backend-go/document"
+	"github.com/inamate/inamate/backend-go/engine"
 )
 
 var eng *engine.Engine
