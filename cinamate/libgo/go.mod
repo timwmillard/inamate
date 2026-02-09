@@ -1,12 +1,10 @@
 module fetch
 
-go 1.25.0
+go 1.25.3
 
-require dbsync v0.0.0
+replace github.com/inamate/inamate/backend-go => ../../backend-go
 
 require (
-	github.com/gorilla/websocket v1.5.3 // indirect
-	github.com/mattn/go-sqlite3 v1.14.33 // indirect
+	github.com/coder/websocket v1.8.14
+	github.com/inamate/inamate/backend-go v0.0.0-00010101000000-000000000000
 )
-
-replace dbsync => ../../dbsync

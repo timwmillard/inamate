@@ -51,11 +51,12 @@ find_program(GOLANG_BINARY "go")
 if(NOT GOLANG_BINARY)
     message(FATAL_ERROR "Cannot find the \"go\" binary, please install it and add it to PATH")
 endif()
+file(GLOB LIBGO_SOURCES "${PROJECT_SOURCE_DIR}/libgo/*.go")
 add_custom_command(OUTPUT "${PROJECT_BINARY_DIR}/libgo/libgo.a" "${PROJECT_BINARY_DIR}/libgo/libgo.h"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/libgo"
     COMMAND ${GOLANG_BINARY} build -buildmode=c-archive -o "${PROJECT_BINARY_DIR}/libgo/libgo.a" .
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/libgo"
-    DEPENDS "${PROJECT_SOURCE_DIR}/libgo"
+    DEPENDS ${LIBGO_SOURCES}
     COMMENT "Building libgo from Go source"
 )
 add_custom_target(build_libgo DEPENDS "${PROJECT_BINARY_DIR}/libgo/libgo.a")

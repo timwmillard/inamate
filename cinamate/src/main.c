@@ -119,13 +119,8 @@ void init(void)
 
 sapp_desc sokol_main(int argc, char *argv[])
 {
-    // GoFetchResponse resp = GoFetch("GET", "https://www.cgeek.dev/", NULL, NULL, 0);
-    // if (resp.error)
-    //     printf("ERROR: %s\n", resp.error);
-    // else
-    //     printf("BODY = %s\n", resp.body);
-    // GoFetchResponseFree(&resp);
-
+    GoInamateNewEngine();
+    GoInamateConnect("http://localhost:8080", "proj_playground");
 
     return (sapp_desc){
         .init_cb = init,
