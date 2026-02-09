@@ -301,6 +301,18 @@ void ui_window(void)
                     window_state.canvas_pan.x += delta.x;
                     window_state.canvas_pan.y += delta.y;
                 }
+
+                // Send cursor position to server (throttled ~60ms)
+                {
+                    static double last_cursor_send = 0;
+                    double now = igGetTime();
+                    if (now - last_cursor_send > 0.060) {
+                        float scene_x = (io->MousePos.x - cursor_origin.x - window_state.canvas_pan.x) / window_state.canvas_zoom;
+                        float scene_y = (io->MousePos.y - cursor_origin.y - window_state.canvas_pan.y) / window_state.canvas_zoom;
+                        GoInamateSendCursor(scene_x, scene_y);
+                        last_cursor_send = now;
+                    }
+                }
             }
 
             float zoom = window_state.canvas_zoom;
@@ -340,6 +352,62 @@ void ui_window(void)
                     ImDrawList_PopClipRect(dl);
                 }
                 GoInamateDrawFrameFree(&frame);
+            }
+
+            // Draw remote user cursors
+            {
+                InPresenceList presences = GoInamateGetPresences();
+                if (presences.count > 0) {
+                    ImDrawList *dl = igGetWindowDrawList();
+
+                    for (int i = 0; i < presences.count; i++) {
+                        InPresence *p = &presences.entries[i];
+                        if (!p->has_cursor) continue;
+
+                        // Scene to screen coordinates
+                        float sx = view_origin.x + p->cursor_x * zoom;
+                        float sy = view_origin.y + p->cursor_y * zoom;
+
+                        ImU32 col = hex_to_imu32(p->color);
+                        ImU32 white = INAMATE_COL32(255, 255, 255, 255);
+
+                        // Cursor arrow shape (matches frontend SVG path)
+                        ImVec2 pts[4] = {
+                            {sx,        sy},
+                            {sx + 14.f, sy + 9.f},
+                            {sx + 7.f,  sy + 9.5f},
+                            {sx + 4.f,  sy + 16.f},
+                        };
+
+                        // Fill
+                        ImDrawList_PathClear(dl);
+                        for (int j = 0; j < 4; j++) ImDrawList_PathLineTo(dl, pts[j]);
+                        ImDrawList_PathFillConcave(dl, col);
+
+                        // Outline
+                        ImDrawList_PathClear(dl);
+                        for (int j = 0; j < 4; j++) ImDrawList_PathLineTo(dl, pts[j]);
+                        ImDrawList_PathStroke(dl, white, ImDrawFlags_Closed, 1.0f);
+
+                        // Name label
+                        if (p->display_name[0]) {
+                            ImVec2 text_size;
+                            igCalcTextSize(&text_size, p->display_name, NULL, false, 0);
+                            float lx = sx + 12.f;
+                            float ly = sy + 14.f;
+                            float px = 4.f, py = 2.f;
+
+                            ImDrawList_AddRectFilled(dl,
+                                (ImVec2){lx - px, ly - py},
+                                (ImVec2){lx + text_size.x + px, ly + text_size.y + py},
+                                col, 3.0f, 0);
+                            ImDrawList_AddText_Vec2(dl,
+                                (ImVec2){lx, ly}, white,
+                                p->display_name, NULL);
+                        }
+                    }
+                }
+                GoInamatePresencesFree(&presences);
             }
         }
         igEnd();
