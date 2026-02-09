@@ -1,5 +1,6 @@
 // UI Window
 
+#include <math.h>
 #include <string.h>
 
 #include "sokol_app.h"
@@ -88,6 +89,22 @@ static void walk_path(ImDrawList *dl, InDrawCmd *cmd, ImVec2 origin, float zoom)
     }
 }
 
+// If the last point in the path buffer is very close to the first, remove it
+// so that ImDrawFlags_Closed creates a proper non-degenerate closing segment.
+// Without this, self-closing paths (e.g. ellipses whose last bezier returns
+// to the moveTo point) produce a zero-length closing segment that causes a
+// diamond-shaped join artifact when stroked.
+static void dedup_closing_point(ImDrawList *dl) {
+    if (dl->_Path.Size < 3) return;
+    ImVec2 first = dl->_Path.Data[0];
+    ImVec2 last  = dl->_Path.Data[dl->_Path.Size - 1];
+    float dx = first.x - last.x;
+    float dy = first.y - last.y;
+    if (dx*dx + dy*dy < 1.0f) {
+        dl->_Path.Size--;
+    }
+}
+
 // Render a single path draw command to an ImDrawList
 static void draw_path_cmd(ImDrawList *dl, InDrawCmd *cmd, ImVec2 origin, float zoom) {
     ImDrawList_PathClear(dl);
@@ -106,6 +123,7 @@ static void draw_path_cmd(ImDrawList *dl, InDrawCmd *cmd, ImVec2 origin, float z
     if (cmd->stroke[0] == '#') {
         ImDrawList_PathClear(dl);
         walk_path(dl, cmd, origin, zoom);
+        dedup_closing_point(dl);
         ImU32 scol = hex_to_imu32(cmd->stroke);
         float sw = (cmd->stroke_width > 0 ? cmd->stroke_width : 1.0f) * zoom;
         ImDrawList_PathStroke(dl, scol, ImDrawFlags_Closed, sw);
