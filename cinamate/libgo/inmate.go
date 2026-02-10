@@ -27,6 +27,7 @@ typedef struct {
 import "C"
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -433,6 +434,120 @@ func GoInamateSceneUpdate(sceneID, changesJSON *C.char) C.int {
 			if err == nil {
 				if err := conn.Write(ws.ctx, websocket.MessageText, msg); err != nil {
 					fmt.Println("scene.update: ws write error:", err)
+				}
+			}
+		}
+	}
+
+	return 0
+}
+
+// --- Object Creation API ---
+
+func newUUID() string {
+	var b [16]byte
+	rand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+//export GoInamateCreateRect
+func GoInamateCreateRect(x, y, w, h C.float) C.int {
+	ws.mu.Lock()
+	ds := ws.docState
+	connected := ws.connected
+	conn := ws.conn
+	projectID := ws.projectID
+	ws.mu.Unlock()
+
+	if ds == nil {
+		fmt.Println("object.create: no document state")
+		return -1
+	}
+
+	// Find scene root
+	doc := ds.GetDocument()
+	if len(doc.Project.Scenes) == 0 {
+		fmt.Println("object.create: no scenes")
+		return -1
+	}
+	scene, ok := doc.Scenes[doc.Project.Scenes[0]]
+	if !ok {
+		fmt.Println("object.create: scene not found")
+		return -1
+	}
+	parentID := scene.Root
+
+	objectID := newUUID()
+	gw := float64(w)
+	gh := float64(h)
+
+	obj := document.ObjectNode{
+		ID:       objectID,
+		Type:     document.ObjectTypeShapeRect,
+		Parent:   &parentID,
+		Children: []string{},
+		Transform: document.Transform{
+			X: float64(x) + gw/2, Y: float64(y) + gh/2,
+			SX: 1, SY: 1, R: 0,
+			AX: gw / 2, AY: gh / 2,
+			SkewX: 0, SkewY: 0,
+		},
+		Style: document.Style{
+			Fill:        "#4a90d9",
+			Stroke:      "#2d5a87",
+			StrokeWidth: 2,
+			Opacity:     1,
+		},
+		Visible: true,
+		Locked:  false,
+		Data:    json.RawMessage(fmt.Sprintf(`{"width":%g,"height":%g}`, gw, gh)),
+	}
+
+	objJSON, err := json.Marshal(obj)
+	if err != nil {
+		fmt.Println("object.create: marshal object error:", err)
+		return -1
+	}
+
+	op := collab.Operation{
+		Type:     "object.create",
+		Object:   objJSON,
+		ParentID: parentID,
+	}
+
+	if _, err := ds.ApplyOperation(op); err != nil {
+		fmt.Println("object.create: apply error:", err)
+		return -1
+	}
+
+	// Feed updated document back to engine
+	docJSON, err := json.Marshal(ds.GetDocument())
+	if err != nil {
+		fmt.Println("object.create: marshal doc error:", err)
+		return -1
+	}
+
+	engMu.Lock()
+	if err := eng.UpdateDocument(string(docJSON)); err != nil {
+		fmt.Println("object.create: engine update error:", err)
+	}
+	engMu.Unlock()
+
+	// Send to server via websocket
+	if connected && conn != nil {
+		payload, err := json.Marshal(op)
+		if err == nil {
+			msg, err := json.Marshal(collab.Message{
+				Type:      collab.TypeOpSubmit,
+				ProjectID: projectID,
+				Payload:   payload,
+			})
+			if err == nil {
+				if err := conn.Write(ws.ctx, websocket.MessageText, msg); err != nil {
+					fmt.Println("object.create: ws write error:", err)
 				}
 			}
 		}

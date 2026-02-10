@@ -11,6 +11,7 @@
 #include "libgo.h"
 
 #include "canvas.h"
+#include "toolbar.h"
 
 static Arena frame_arena = {0};
 
@@ -18,6 +19,9 @@ static float canvas_zoom = 1.0f;
 static ImVec2 canvas_pan = {0};
 
 static CanvasSceneInfo last_scene_info = {0};
+
+static bool is_drawing_rect = false;
+static ImVec2 rect_draw_start = {0};
 
 // Pack RGBA into ImU32 (ImGui's ABGR byte order)
 #define INAMATE_COL32(r,g,b,a) (((ImU32)(a)<<24) | ((ImU32)(b)<<16) | ((ImU32)(g)<<8) | ((ImU32)(r)))
@@ -145,10 +149,13 @@ void ui_canvas(bool *open) {
         ImVec2 cursor_origin;
         igGetCursorScreenPos(&cursor_origin);
 
+        // Compute scene-space mouse position (used for tools and cursor sending)
+        ImGuiIO *io = igGetIO_Nil();
+        float scene_x = (io->MousePos.x - cursor_origin.x - canvas_pan.x) / canvas_zoom;
+        float scene_y = (io->MousePos.y - cursor_origin.y - canvas_pan.y) / canvas_zoom;
+
         // Input: zoom and pan
         if (igIsWindowHovered(ImGuiHoveredFlags_None)) {
-            ImGuiIO *io = igGetIO_Nil();
-
             // Mouse wheel → zoom toward cursor
             if (io->MouseWheel != 0) {
                 float old_zoom = canvas_zoom;
@@ -177,12 +184,33 @@ void ui_canvas(bool *open) {
                 static double last_cursor_send = 0;
                 double now = igGetTime();
                 if (now - last_cursor_send > 0.060) {
-                    float scene_x = (io->MousePos.x - cursor_origin.x - canvas_pan.x) / canvas_zoom;
-                    float scene_y = (io->MousePos.y - cursor_origin.y - canvas_pan.y) / canvas_zoom;
                     GoInamateSendCursor(scene_x, scene_y);
                     last_cursor_send = now;
                 }
             }
+
+            // Rect tool: start drawing
+            ToolType tool = ui_toolbar_get_active_tool();
+            if (tool == TOOL_RECT && igIsMouseClicked_Bool(ImGuiMouseButton_Left, false)) {
+                is_drawing_rect = true;
+                rect_draw_start.x = scene_x;
+                rect_draw_start.y = scene_y;
+            }
+        }
+
+        // Rect tool: finalize on mouse release (works even if mouse drifts outside window)
+        if (is_drawing_rect && igIsMouseReleased_Nil(ImGuiMouseButton_Left)) {
+            is_drawing_rect = false;
+            float rx = fminf(rect_draw_start.x, scene_x);
+            float ry = fminf(rect_draw_start.y, scene_y);
+            float rw = fabsf(scene_x - rect_draw_start.x);
+            float rh = fabsf(scene_y - rect_draw_start.y);
+            if (rw < 3 && rh < 3) {
+                rw = 100; rh = 100;
+                rx = rect_draw_start.x - 50;
+                ry = rect_draw_start.y - 50;
+            }
+            GoInamateCreateRect(rx, ry, rw, rh);
         }
 
         float zoom = canvas_zoom;
@@ -260,6 +288,27 @@ void ui_canvas(bool *open) {
                 if (cmd->op == 0 && cmd->path_len > 0) {
                     draw_path_cmd(dl, cmd, view_origin, zoom);
                 }
+            }
+
+            // Draw rect tool preview overlay
+            if (is_drawing_rect) {
+                float sx = scene_x, sy = scene_y;
+                float min_sx = fminf(rect_draw_start.x, sx);
+                float min_sy = fminf(rect_draw_start.y, sy);
+                float max_sx = fmaxf(rect_draw_start.x, sx);
+                float max_sy = fmaxf(rect_draw_start.y, sy);
+                ImVec2 min_pt = {
+                    view_origin.x + min_sx * zoom,
+                    view_origin.y + min_sy * zoom,
+                };
+                ImVec2 max_pt = {
+                    view_origin.x + max_sx * zoom,
+                    view_origin.y + max_sy * zoom,
+                };
+                ImU32 preview_fill = INAMATE_COL32(74, 144, 217, 40);
+                ImU32 preview_stroke = INAMATE_COL32(74, 144, 217, 200);
+                ImDrawList_AddRectFilled(dl, min_pt, max_pt, preview_fill, 0, 0);
+                ImDrawList_AddRect(dl, min_pt, max_pt, preview_stroke, 0, 0, 1.5f);
             }
 
             if (frame.scene_width > 0 && frame.scene_height > 0) {
