@@ -36,18 +36,29 @@ static const ToolDef tool_defs[TOOL_COUNT] = {
 
 void ui_toolbar(bool *open)
 {
+    (void)open;
+
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar
                            | ImGuiWindowFlags_NoScrollbar
                            | ImGuiWindowFlags_NoResize;
 
-    if (!igBegin("Toolbar", open, flags)) {
-        igEnd();
+    igPushStyleVar_Vec2(ImGuiStyleVar_WindowPadding, (ImVec2){0, 0});
+    igPushStyleVar_Vec2(ImGuiStyleVar_ButtonTextAlign, (ImVec2){0.5f, 0.5f});
+    if (!igBeginChild_Str("##Toolbar", (ImVec2){TOOLBAR_WIDTH, 0}, ImGuiChildFlags_None, flags)) {
+        igEndChild();
+        igPopStyleVar(2);
         return;
     }
 
     ImVec2 btn_size = {28, 28};
+    ImVec2 avail;
+    igGetContentRegionAvail(&avail);
+    float indent = (avail.x - btn_size.x) * 0.5f;
+
+    igSetCursorPosY(igGetCursorPosY() + 8.0f);
 
     for (int i = 0; i < TOOL_COUNT; i++) {
+        igSetCursorPosX(indent);
         bool is_active = (active_tool == (ToolType)i);
 
         if (is_active) {
@@ -73,5 +84,6 @@ void ui_toolbar(bool *open)
         igPopStyleColor(3);
     }
 
-    igEnd();
+    igEndChild();
+    igPopStyleVar(2);
 }

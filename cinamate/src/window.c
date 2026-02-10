@@ -18,8 +18,6 @@ static struct {
     bool show_canvas;
     bool show_properties;
     bool show_timeline;
-    bool show_toolbar;
-
     bool show_demo;
     bool dock_setup_done;
 
@@ -32,7 +30,6 @@ void ui_reset_layout(ImGuiID dockspace_id)
     window_state.show_canvas = true;
     window_state.show_properties = true;
     window_state.show_timeline = true;
-    window_state.show_toolbar = true;
 
     igDockBuilderRemoveNode(dockspace_id);
     igDockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
@@ -40,22 +37,16 @@ void ui_reset_layout(ImGuiID dockspace_id)
 
     ImGuiID dock_top = 0;
     ImGuiID dock_timeline = 0;
-    igDockBuilderSplitNode(dockspace_id, ImGuiDir_Up, 0.7f, &dock_top, &dock_timeline);
+    igDockBuilderSplitNode(dockspace_id, ImGuiDir_Up, 0.8f, &dock_top, &dock_timeline);
 
     ImGuiID dock_right = 0;
-    ImGuiID dock_canvas_area = igDockBuilderSplitNode(dock_top, ImGuiDir_Left, 0.75f, NULL, &dock_right);
-
-    // Split canvas area: toolbar (left) | canvas (right)
-    ImGuiID dock_toolbar = 0;
     ImGuiID dock_canvas = 0;
-    igDockBuilderSplitNode(dock_canvas_area, ImGuiDir_Left, 0.05f, &dock_toolbar, &dock_canvas);
+    igDockBuilderSplitNode(dock_top, ImGuiDir_Left, 0.75f, &dock_canvas, &dock_right);
 
-    igDockBuilderDockWindow("Toolbar", dock_toolbar);
     igDockBuilderDockWindow("Canvas", dock_canvas);
     igDockBuilderDockWindow("Properties", dock_right);
     igDockBuilderDockWindow("Timeline", dock_timeline);
 
-    igDockBuilderGetNode(dock_toolbar)->LocalFlags |= ImGuiDockNodeFlags_NoTabBar | ImGuiDockNodeFlags_NoResize;
     igDockBuilderGetNode(dock_canvas)->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
     igDockBuilderGetNode(dock_right)->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
     igDockBuilderGetNode(dock_timeline)->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
@@ -202,12 +193,7 @@ void ui_window(void)
         window_state.dock_setup_done = true;
     }
 
-    // Toolbar
-    if (window_state.show_toolbar) {
-        ui_toolbar(&window_state.show_toolbar);
-    }
-
-    // Canvas Window
+    // Canvas Window (toolbar is embedded inside)
     if (window_state.show_canvas) {
         ui_canvas(&window_state.show_canvas);
     }

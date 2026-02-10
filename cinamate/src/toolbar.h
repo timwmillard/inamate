@@ -19,6 +19,8 @@ typedef enum {
 
 ToolType ui_toolbar_get_active_tool(void);
 void ui_toolbar_set_active_tool(ToolType tool);
+#define TOOLBAR_WIDTH 40.0f
+
 void ui_toolbar(bool *open);
 
 #endif

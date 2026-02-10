@@ -176,6 +176,20 @@ void ui_canvas_clear_selection(void) {
 void ui_canvas(bool *open) {
     igPushStyleVar_Vec2(ImGuiStyleVar_WindowPadding, (ImVec2){0, 0});
     if (igBegin("Canvas", open, ImGuiWindowFlags_None)) {
+
+        // Toolbar child on the left
+        ui_toolbar(NULL);
+        igSameLine(0, 0);
+
+        // Canvas area child fills the rest
+        if (!igBeginChild_Str("##CanvasArea", (ImVec2){0, 0}, ImGuiChildFlags_None, ImGuiWindowFlags_None)) {
+            igEndChild();
+            igEnd();
+            igPopStyleVar(1);
+            arena_reset(&frame_arena);
+            return;
+        }
+
         ImVec2 cursor_origin;
         igGetCursorScreenPos(&cursor_origin);
 
@@ -707,6 +721,7 @@ void ui_canvas(bool *open) {
             }
         }
 
+        igEndChild();
     }
     igEnd();
     igPopStyleVar(1);
