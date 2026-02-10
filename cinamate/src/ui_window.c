@@ -272,6 +272,7 @@ void ui_window(void)
 
     // Canvas Window
     if (window_state.show_canvas) {
+        igPushStyleVar_Vec2(ImGuiStyleVar_WindowPadding, (ImVec2){0, 0});
         if (igBegin("Canvas", &window_state.show_canvas, ImGuiWindowFlags_None)) {
             ImVec2 cursor_origin;
             igGetCursorScreenPos(&cursor_origin);
@@ -321,6 +322,43 @@ void ui_window(void)
                 cursor_origin.x + window_state.canvas_pan.x,
                 cursor_origin.y + window_state.canvas_pan.y,
             };
+
+            // Draw checkerboard background (matches frontend viewport pattern)
+            {
+                ImDrawList *dl = igGetWindowDrawList();
+                ImVec2 wsize;
+                igGetContentRegionAvail(&wsize);
+                float x0 = cursor_origin.x;
+                float y0 = cursor_origin.y;
+                float x1 = x0 + wsize.x;
+                float y1 = y0 + wsize.y;
+
+                ImU32 col_a = INAMATE_COL32(26, 26, 26, 255);   // #1a1a1a
+                ImU32 col_b = INAMATE_COL32(34, 34, 34, 255);   // #222222
+                float tile = 20.0f;
+
+                // Fill base color
+                ImDrawList_AddRectFilled(dl, (ImVec2){x0, y0}, (ImVec2){x1, y1}, col_a, 0, 0);
+
+                // Draw alternating squares
+                ImDrawList_PushClipRect(dl, (ImVec2){x0, y0}, (ImVec2){x1, y1}, true);
+                int col_start = (int)floorf(x0 / tile);
+                int col_end   = (int)ceilf(x1 / tile);
+                int row_start = (int)floorf(y0 / tile);
+                int row_end   = (int)ceilf(y1 / tile);
+                for (int row = row_start; row < row_end; row++) {
+                    for (int col = col_start; col < col_end; col++) {
+                        if ((row + col) % 2 == 0) continue;
+                        float rx = col * tile;
+                        float ry = row * tile;
+                        ImDrawList_AddRectFilled(dl,
+                            (ImVec2){rx, ry},
+                            (ImVec2){rx + tile, ry + tile},
+                            col_b, 0, 0);
+                    }
+                }
+                ImDrawList_PopClipRect(dl);
+            }
 
             if (GoInamateIsDocLoaded()) {
                 ImDrawList *dl = igGetWindowDrawList();
@@ -411,6 +449,7 @@ void ui_window(void)
 
         }
         igEnd();
+        igPopStyleVar(1);
     }
     if (window_state.show_properties) {
         if (igBegin("Properties", &window_state.show_canvas, ImGuiWindowFlags_None)) {
