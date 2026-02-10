@@ -9,6 +9,10 @@
 #include "timeline.h"
 #include "toolbar.h"
 
+#include "arena.h"
+#define ARENA_FWD_DECL_
+#include "libgo.h"
+
 static struct {
     // GUI
     bool show_canvas;
@@ -111,6 +115,7 @@ void ui_window(void)
             if (igMenuItem_Bool("Delete", "Del", false, true)) {
             }
             if (igMenuItem_Bool("Delete All", "", false, true)) {
+                GoInamateDeleteAll();
             }
             igSeparator();
             if (igMenuItem_Bool("Select All", "Del", false, true)) {

@@ -556,6 +556,83 @@ func GoInamateCreateRect(x, y, w, h C.float) C.int {
 	return 0
 }
 
+//export GoInamateDeleteAll
+func GoInamateDeleteAll() C.int {
+	ws.mu.Lock()
+	ds := ws.docState
+	connected := ws.connected
+	conn := ws.conn
+	projectID := ws.projectID
+	ws.mu.Unlock()
+
+	if ds == nil {
+		fmt.Println("delete_all: no document state")
+		return -1
+	}
+
+	doc := ds.GetDocument()
+	if len(doc.Project.Scenes) == 0 {
+		return 0
+	}
+	scene, ok := doc.Scenes[doc.Project.Scenes[0]]
+	if !ok {
+		return 0
+	}
+
+	root, ok := doc.Objects[scene.Root]
+	if !ok || len(root.Children) == 0 {
+		return 0
+	}
+
+	// Collect children to delete (snapshot before mutation)
+	children := make([]string, len(root.Children))
+	copy(children, root.Children)
+
+	for _, childID := range children {
+		op := collab.Operation{
+			Type:     "object.delete",
+			ObjectID: childID,
+		}
+
+		if _, err := ds.ApplyOperation(op); err != nil {
+			fmt.Println("delete_all: apply error:", err)
+			continue
+		}
+
+		// Send to server
+		if connected && conn != nil {
+			payload, err := json.Marshal(op)
+			if err == nil {
+				msg, err := json.Marshal(collab.Message{
+					Type:      collab.TypeOpSubmit,
+					ProjectID: projectID,
+					Payload:   payload,
+				})
+				if err == nil {
+					if err := conn.Write(ws.ctx, websocket.MessageText, msg); err != nil {
+						fmt.Println("delete_all: ws write error:", err)
+					}
+				}
+			}
+		}
+	}
+
+	// Feed updated document back to engine
+	docJSON, err := json.Marshal(ds.GetDocument())
+	if err != nil {
+		fmt.Println("delete_all: marshal doc error:", err)
+		return -1
+	}
+
+	engMu.Lock()
+	if err := eng.UpdateDocument(string(docJSON)); err != nil {
+		fmt.Println("delete_all: engine update error:", err)
+	}
+	engMu.Unlock()
+
+	return 0
+}
+
 // --- Presence API ---
 
 //export GoInamateSendCursor
