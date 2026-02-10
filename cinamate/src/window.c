@@ -6,6 +6,7 @@
 
 #include "canvas.h"
 #include "properties.h"
+#include "timeline.h"
 
 static struct {
     // GUI
@@ -23,12 +24,28 @@ static struct {
 void ui_reset_layout(ImGuiID dockspace_id)
 {
     window_state.show_canvas = true;
+    window_state.show_properties = true;
+    window_state.show_timeline = true;
 
     igDockBuilderRemoveNode(dockspace_id);
     igDockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
     igDockBuilderSetNodeSize(dockspace_id, igGetMainViewport()->Size);
 
-    igDockBuilderDockWindow("Canvas", dockspace_id);
+    ImGuiID dock_top = 0;
+    ImGuiID dock_timeline = 0;
+    igDockBuilderSplitNode(dockspace_id, ImGuiDir_Up, 0.7f, &dock_top, &dock_timeline);
+
+    ImGuiID dock_right = 0;
+    ImGuiID dock_canvas = igDockBuilderSplitNode(dock_top, ImGuiDir_Left, 0.75f, NULL, &dock_right);
+
+    igDockBuilderDockWindow("Canvas", dock_canvas);
+    igDockBuilderDockWindow("Properties", dock_right);
+    igDockBuilderDockWindow("Timeline", dock_timeline);
+
+    igDockBuilderGetNode(dock_canvas)->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+    igDockBuilderGetNode(dock_right)->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+    igDockBuilderGetNode(dock_timeline)->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+
     igDockBuilderFinish(dockspace_id);
 }
 
@@ -162,9 +179,7 @@ void ui_window(void)
         ui_properties(&window_state.show_properties);
     }
     if (window_state.show_timeline) {
-        if (igBegin("Timeline", &window_state.show_timeline, ImGuiWindowFlags_None)) {
-        }
-        igEnd();
+        ui_timeline(&window_state.show_timeline);
     }
 
     // Demo Window
