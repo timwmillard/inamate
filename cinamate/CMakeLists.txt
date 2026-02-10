@@ -90,6 +90,7 @@ add_executable(${PROJECT_NAME}
     src/main.c
     src/window.c
     src/canvas.c
+    src/properties.c
     deps/deps.c
     deps/deps.cpp
     deps/cimgui/cimgui.cpp

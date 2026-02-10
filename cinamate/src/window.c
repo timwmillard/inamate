@@ -5,6 +5,7 @@
 #include "cimgui.h"
 
 #include "canvas.h"
+#include "properties.h"
 
 static struct {
     // GUI
@@ -158,12 +159,10 @@ void ui_window(void)
         ui_canvas(&window_state.show_canvas);
     }
     if (window_state.show_properties) {
-        if (igBegin("Properties", &window_state.show_canvas, ImGuiWindowFlags_None)) {
-        }
-        igEnd();
+        ui_properties(&window_state.show_properties);
     }
     if (window_state.show_timeline) {
-        if (igBegin("Timeline", &window_state.show_canvas, ImGuiWindowFlags_None)) {
+        if (igBegin("Timeline", &window_state.show_timeline, ImGuiWindowFlags_None)) {
         }
         igEnd();
     }
