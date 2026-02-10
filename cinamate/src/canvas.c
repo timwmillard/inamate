@@ -29,6 +29,18 @@ static bool is_dragging_selection = false;
 static ImVec2 drag_start_scene = {0};
 static float drag_initial_x = 0, drag_initial_y = 0;
 
+// Resize handle state
+typedef enum {
+    HANDLE_NONE = -1,
+    HANDLE_TL = 0, HANDLE_TR, HANDLE_BL, HANDLE_BR,
+    HANDLE_T, HANDLE_B, HANDLE_L, HANDLE_R,
+} HandleType;
+
+static bool is_resizing = false;
+static HandleType resize_handle = HANDLE_NONE;
+static float resize_init_left, resize_init_top;
+static float resize_init_right, resize_init_bottom;
+
 // Pack RGBA into ImU32 (ImGui's ABGR byte order)
 #define INAMATE_COL32(r,g,b,a) (((ImU32)(a)<<24) | ((ImU32)(b)<<16) | ((ImU32)(g)<<8) | ((ImU32)(r)))
 
@@ -163,6 +175,13 @@ void ui_canvas(bool *open) {
         ImVec2 cursor_origin;
         igGetCursorScreenPos(&cursor_origin);
 
+        // View transform
+        float zoom = canvas_zoom;
+        ImVec2 view_origin = {
+            cursor_origin.x + canvas_pan.x,
+            cursor_origin.y + canvas_pan.y,
+        };
+
         // Compute scene-space mouse position (used for tools and cursor sending)
         ImGuiIO *io = igGetIO_Nil();
         float scene_x = (io->MousePos.x - cursor_origin.x - canvas_pan.x) / canvas_zoom;
@@ -205,20 +224,108 @@ void ui_canvas(bool *open) {
 
             ToolType tool = ui_toolbar_get_active_tool();
 
-            // Select tool: click to select/deselect, initiate drag
+            // Select tool: click to select/deselect, initiate drag or resize
             if (tool == TOOL_SELECT && igIsMouseClicked_Bool(ImGuiMouseButton_Left, false)) {
-                char hit_id[64] = {0};
-                int hit = GoInamateHitTest(scene_x, scene_y, hit_id, 64);
-                if (hit) {
-                    memcpy(selected_object_id, hit_id, 64);
-                    is_dragging_selection = true;
-                    drag_start_scene = (ImVec2){scene_x, scene_y};
-                    InObjectInfo info = GoInamateGetSelectedObject();
-                    drag_initial_x = info.x;
-                    drag_initial_y = info.y;
-                } else {
-                    selected_object_id[0] = '\0';
-                    GoInamateClearSelection();
+                // Check resize handles first (if something is selected)
+                HandleType clicked_handle = HANDLE_NONE;
+                if (selected_object_id[0]) {
+                    float sel_x, sel_y, sel_w, sel_h;
+                    if (GoInamateGetSelectionBounds(&sel_x, &sel_y, &sel_w, &sel_h)) {
+                        ImVec2 smin = {
+                            view_origin.x + sel_x * zoom,
+                            view_origin.y + sel_y * zoom,
+                        };
+                        ImVec2 smax = {
+                            view_origin.x + (sel_x + sel_w) * zoom,
+                            view_origin.y + (sel_y + sel_h) * zoom,
+                        };
+                        float mx = (smin.x + smax.x) * 0.5f;
+                        float my = (smin.y + smax.y) * 0.5f;
+
+                        ImVec2 handles[8] = {
+                            {smin.x, smin.y}, {smax.x, smin.y},
+                            {smin.x, smax.y}, {smax.x, smax.y},
+                            {mx,     smin.y}, {mx,     smax.y},
+                            {smin.x, my},     {smax.x, my},
+                        };
+
+                        float grab_radius = 6.0f;
+                        for (int h = 0; h < 8; h++) {
+                            float dx = io->MousePos.x - handles[h].x;
+                            float dy = io->MousePos.y - handles[h].y;
+                            if (dx*dx + dy*dy <= grab_radius * grab_radius) {
+                                clicked_handle = (HandleType)h;
+                                break;
+                            }
+                        }
+
+                        if (clicked_handle != HANDLE_NONE) {
+                            is_resizing = true;
+                            resize_handle = clicked_handle;
+                            resize_init_left = sel_x;
+                            resize_init_top = sel_y;
+                            resize_init_right = sel_x + sel_w;
+                            resize_init_bottom = sel_y + sel_h;
+                            drag_start_scene = (ImVec2){scene_x, scene_y};
+                        }
+                    }
+                }
+
+                if (clicked_handle == HANDLE_NONE) {
+                    char hit_id[64] = {0};
+                    int hit = GoInamateHitTest(scene_x, scene_y, hit_id, 64);
+                    if (hit) {
+                        memcpy(selected_object_id, hit_id, 64);
+                        is_dragging_selection = true;
+                        drag_start_scene = (ImVec2){scene_x, scene_y};
+                        InObjectInfo info = GoInamateGetSelectedObject();
+                        drag_initial_x = info.x;
+                        drag_initial_y = info.y;
+                    } else {
+                        selected_object_id[0] = '\0';
+                        GoInamateClearSelection();
+                    }
+                }
+            }
+
+            // Resize cursor feedback when hovering handles
+            if (tool == TOOL_SELECT && selected_object_id[0] && !is_dragging_selection && !is_resizing) {
+                float sel_x, sel_y, sel_w, sel_h;
+                if (GoInamateGetSelectionBounds(&sel_x, &sel_y, &sel_w, &sel_h)) {
+                    ImVec2 smin = {
+                        view_origin.x + sel_x * zoom,
+                        view_origin.y + sel_y * zoom,
+                    };
+                    ImVec2 smax = {
+                        view_origin.x + (sel_x + sel_w) * zoom,
+                        view_origin.y + (sel_y + sel_h) * zoom,
+                    };
+                    float hmx = (smin.x + smax.x) * 0.5f;
+                    float hmy = (smin.y + smax.y) * 0.5f;
+
+                    ImVec2 handles[8] = {
+                        {smin.x, smin.y}, {smax.x, smin.y},
+                        {smin.x, smax.y}, {smax.x, smax.y},
+                        {hmx,    smin.y}, {hmx,    smax.y},
+                        {smin.x, hmy},    {smax.x, hmy},
+                    };
+                    // NWSE diagonal, NESW diagonal, NS vertical, EW horizontal
+                    ImGuiMouseCursor cursors[8] = {
+                        ImGuiMouseCursor_ResizeNWSE, ImGuiMouseCursor_ResizeNESW,
+                        ImGuiMouseCursor_ResizeNESW, ImGuiMouseCursor_ResizeNWSE,
+                        ImGuiMouseCursor_ResizeNS,   ImGuiMouseCursor_ResizeNS,
+                        ImGuiMouseCursor_ResizeEW,   ImGuiMouseCursor_ResizeEW,
+                    };
+
+                    float grab_radius = 6.0f;
+                    for (int h = 0; h < 8; h++) {
+                        float hdx = io->MousePos.x - handles[h].x;
+                        float hdy = io->MousePos.y - handles[h].y;
+                        if (hdx*hdx + hdy*hdy <= grab_radius * grab_radius) {
+                            igSetMouseCursor(cursors[h]);
+                            break;
+                        }
+                    }
                 }
             }
 
@@ -242,7 +349,8 @@ void ui_canvas(bool *open) {
                 rx = rect_draw_start.x - 50;
                 ry = rect_draw_start.y - 50;
             }
-            GoInamateCreateRect(rx, ry, rw, rh);
+            GoInamateCreateRect(rx, ry, rw, rh, selected_object_id, 64);
+            ui_toolbar_set_active_tool(TOOL_SELECT);
         }
 
         // Select tool: drag to move selected object
@@ -259,11 +367,81 @@ void ui_canvas(bool *open) {
             }
         }
 
-        float zoom = canvas_zoom;
-        ImVec2 view_origin = {
-            cursor_origin.x + canvas_pan.x,
-            cursor_origin.y + canvas_pan.y,
-        };
+        // Select tool: resize by dragging handles
+        if (is_resizing) {
+            // Set resize cursor during drag
+            ImGuiMouseCursor rc[] = {
+                [HANDLE_TL] = ImGuiMouseCursor_ResizeNWSE,
+                [HANDLE_TR] = ImGuiMouseCursor_ResizeNESW,
+                [HANDLE_BL] = ImGuiMouseCursor_ResizeNESW,
+                [HANDLE_BR] = ImGuiMouseCursor_ResizeNWSE,
+                [HANDLE_T]  = ImGuiMouseCursor_ResizeNS,
+                [HANDLE_B]  = ImGuiMouseCursor_ResizeNS,
+                [HANDLE_L]  = ImGuiMouseCursor_ResizeEW,
+                [HANDLE_R]  = ImGuiMouseCursor_ResizeEW,
+            };
+            if (resize_handle >= 0 && resize_handle < 8)
+                igSetMouseCursor(rc[resize_handle]);
+
+            float dx = scene_x - drag_start_scene.x;
+            float dy = scene_y - drag_start_scene.y;
+
+            float new_left   = resize_init_left;
+            float new_top    = resize_init_top;
+            float new_right  = resize_init_right;
+            float new_bottom = resize_init_bottom;
+
+            switch (resize_handle) {
+            case HANDLE_TL: new_left += dx; new_top += dy; break;
+            case HANDLE_TR: new_right += dx; new_top += dy; break;
+            case HANDLE_BL: new_left += dx; new_bottom += dy; break;
+            case HANDLE_BR: new_right += dx; new_bottom += dy; break;
+            case HANDLE_T:  new_top += dy; break;
+            case HANDLE_B:  new_bottom += dy; break;
+            case HANDLE_L:  new_left += dx; break;
+            case HANDLE_R:  new_right += dx; break;
+            default: break;
+            }
+
+            // Enforce minimum size
+            float min_size = 2.0f;
+            if (new_right - new_left < min_size) {
+                if (resize_handle == HANDLE_TL || resize_handle == HANDLE_BL || resize_handle == HANDLE_L)
+                    new_left = new_right - min_size;
+                else
+                    new_right = new_left + min_size;
+            }
+            if (new_bottom - new_top < min_size) {
+                if (resize_handle == HANDLE_TL || resize_handle == HANDLE_TR || resize_handle == HANDLE_T)
+                    new_top = new_bottom - min_size;
+                else
+                    new_bottom = new_top + min_size;
+            }
+
+            float new_w = new_right - new_left;
+            float new_h = new_bottom - new_top;
+            float new_cx = new_left + new_w * 0.5f;
+            float new_cy = new_top + new_h * 0.5f;
+            float new_ax = new_w * 0.5f;
+            float new_ay = new_h * 0.5f;
+
+            char t_json[256];
+            snprintf(t_json, sizeof(t_json),
+                "{\"x\":%g,\"y\":%g,\"ax\":%g,\"ay\":%g}",
+                (double)new_cx, (double)new_cy, (double)new_ax, (double)new_ay);
+            GoInamateObjectTransform(selected_object_id, t_json);
+
+            char d_json[128];
+            snprintf(d_json, sizeof(d_json),
+                "{\"width\":%g,\"height\":%g}",
+                (double)new_w, (double)new_h);
+            GoInamateObjectData(selected_object_id, d_json);
+
+            if (igIsMouseReleased_Nil(ImGuiMouseButton_Left)) {
+                is_resizing = false;
+                resize_handle = HANDLE_NONE;
+            }
+        }
 
         // Draw checkerboard background (matches frontend viewport pattern)
         {

@@ -10,6 +10,11 @@ ToolType ui_toolbar_get_active_tool(void)
     return active_tool;
 }
 
+void ui_toolbar_set_active_tool(ToolType tool)
+{
+    active_tool = tool;
+}
+
 typedef struct {
     const char *icon;
     const char *name;

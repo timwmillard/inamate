@@ -457,7 +457,7 @@ func newUUID() string {
 }
 
 //export GoInamateCreateRect
-func GoInamateCreateRect(x, y, w, h C.float) C.int {
+func GoInamateCreateRect(x, y, w, h C.float, outID *C.char, outIDLen C.int) C.int {
 	ws.mu.Lock()
 	ds := ws.docState
 	connected := ws.connected
@@ -537,7 +537,17 @@ func GoInamateCreateRect(x, y, w, h C.float) C.int {
 	if err := eng.UpdateDocument(string(docJSON)); err != nil {
 		fmt.Println("object.create: engine update error:", err)
 	}
+	eng.SetSelection([]string{objectID})
 	engMu.Unlock()
+
+	// Select the newly created object
+	selectedMu.Lock()
+	selectedID = objectID
+	selectedMu.Unlock()
+
+	if outID != nil && outIDLen > 0 {
+		copyToCharArray(outID, int(outIDLen), objectID)
+	}
 
 	// Send to server via websocket
 	if connected && conn != nil {
@@ -895,6 +905,65 @@ func GoInamateObjectTransform(objectID, changesJSON *C.char) C.int {
 			if err == nil {
 				if err := conn.Write(ws.ctx, websocket.MessageText, msg); err != nil {
 					fmt.Println("object.transform: ws write error:", err)
+				}
+			}
+		}
+	}
+
+	return 0
+}
+
+//export GoInamateObjectData
+func GoInamateObjectData(objectID, changesJSON *C.char) C.int {
+	goObjectID := C.GoString(objectID)
+	goChanges := C.GoString(changesJSON)
+
+	ws.mu.Lock()
+	ds := ws.docState
+	connected := ws.connected
+	conn := ws.conn
+	projectID := ws.projectID
+	ws.mu.Unlock()
+
+	if ds == nil {
+		fmt.Println("object.data: no document state")
+		return -1
+	}
+
+	op := collab.Operation{
+		Type:     "object.data",
+		ObjectID: goObjectID,
+		Data:     json.RawMessage(goChanges),
+	}
+
+	if _, err := ds.ApplyOperation(op); err != nil {
+		fmt.Println("object.data: apply error:", err)
+		return -1
+	}
+
+	docJSON, err := json.Marshal(ds.GetDocument())
+	if err != nil {
+		fmt.Println("object.data: marshal error:", err)
+		return -1
+	}
+
+	engMu.Lock()
+	if err := eng.UpdateDocument(string(docJSON)); err != nil {
+		fmt.Println("object.data: engine update error:", err)
+	}
+	engMu.Unlock()
+
+	if connected && conn != nil {
+		payload, err := json.Marshal(op)
+		if err == nil {
+			msg, err := json.Marshal(collab.Message{
+				Type:      collab.TypeOpSubmit,
+				ProjectID: projectID,
+				Payload:   payload,
+			})
+			if err == nil {
+				if err := conn.Write(ws.ctx, websocket.MessageText, msg); err != nil {
+					fmt.Println("object.data: ws write error:", err)
 				}
 			}
 		}

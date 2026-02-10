@@ -18,6 +18,7 @@ typedef enum {
 } ToolType;
 
 ToolType ui_toolbar_get_active_tool(void);
+void ui_toolbar_set_active_tool(ToolType tool);
 void ui_toolbar(bool *open);
 
 #endif
