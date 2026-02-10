@@ -79,6 +79,8 @@ void cleanup(void)
 // embed fonts
 #include "font/Roboto-Regular_ttf.h"
 #include "font/Roboto-Bold_ttf.h"
+#include "font/fa-solid-900_ttf.h"
+#include "font/IconsFontAwesome6.h"
 
 void init(void)
 {
@@ -105,6 +107,16 @@ void init(void)
     void *font_data = malloc(Roboto_Regular_ttf_len);
     memcpy(font_data, Roboto_Regular_ttf_data, Roboto_Regular_ttf_len);
     ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, font_data, Roboto_Regular_ttf_len, 16.0f, font_cfg, NULL);
+
+    // Merge FontAwesome icons into the font
+    ImFontConfig* icon_cfg = ImFontConfig_ImFontConfig();
+    icon_cfg->MergeMode = true;
+    icon_cfg->GlyphMinAdvanceX = 16.0f;
+    static const ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+    void *icon_data = malloc(fa_solid_900_ttf_len);
+    memcpy(icon_data, fa_solid_900_ttf_data, fa_solid_900_ttf_len);
+    ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, icon_data, fa_solid_900_ttf_len, 16.0f, icon_cfg, icon_ranges);
+    ImFontConfig_destroy(icon_cfg);
 
     ImFontConfig_destroy(font_cfg);
 

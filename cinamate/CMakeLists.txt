@@ -92,6 +92,7 @@ add_executable(${PROJECT_NAME}
     src/canvas.c
     src/properties.c
     src/timeline.c
+    src/toolbar.c
     deps/deps.c
     deps/deps.cpp
     deps/cimgui/cimgui.cpp
