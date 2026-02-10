@@ -103,6 +103,17 @@ add_executable(${PROJECT_NAME}
     deps/cimgui/imgui/imgui_demo.cpp
 )
 
+# macOS app bundle
+if(APPLE)
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "Cinamate"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "dev.millardsoftware.cinamate"
+        MACOSX_BUNDLE_BUNDLE_VERSION "0.1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1"
+    )
+endif()
+
 # Ensure generated files are created before building the executable
 add_dependencies(${PROJECT_NAME}
     generate_fonts

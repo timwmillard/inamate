@@ -4,7 +4,7 @@ tmp_dir = "build"
 
 [build]
 args_bin = [""]
-entrypoint = "./build/cinamate"
+entrypoint = "./build/cinamate.app/Contents/MacOS/cinamate"
 pre_cmd = []
 cmd = "cmake --build build"
 post_cmd = []
