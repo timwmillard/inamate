@@ -23,6 +23,9 @@ static CanvasSceneInfo last_scene_info = {0};
 static bool is_drawing_rect = false;
 static ImVec2 rect_draw_start = {0};
 
+static bool is_drawing_ellipse = false;
+static ImVec2 ellipse_draw_start = {0};
+
 static char selected_object_id[64] = {0};
 
 static bool is_dragging_selection = false;
@@ -40,6 +43,7 @@ static bool is_resizing = false;
 static HandleType resize_handle = HANDLE_NONE;
 static float resize_init_left, resize_init_top;
 static float resize_init_right, resize_init_bottom;
+static char resize_obj_type[32] = {0};
 
 // Pack RGBA into ImU32 (ImGui's ABGR byte order)
 #define INAMATE_COL32(r,g,b,a) (((ImU32)(a)<<24) | ((ImU32)(b)<<16) | ((ImU32)(g)<<8) | ((ImU32)(r)))
@@ -267,6 +271,9 @@ void ui_canvas(bool *open) {
                             resize_init_right = sel_x + sel_w;
                             resize_init_bottom = sel_y + sel_h;
                             drag_start_scene = (ImVec2){scene_x, scene_y};
+                            InObjectInfo rinfo = GoInamateGetSelectedObject();
+                            strncpy(resize_obj_type, rinfo.type, sizeof(resize_obj_type) - 1);
+                            resize_obj_type[sizeof(resize_obj_type) - 1] = '\0';
                         }
                     }
                 }
@@ -335,6 +342,13 @@ void ui_canvas(bool *open) {
                 rect_draw_start.x = scene_x;
                 rect_draw_start.y = scene_y;
             }
+
+            // Ellipse tool: start drawing
+            if (tool == TOOL_ELLIPSE && igIsMouseClicked_Bool(ImGuiMouseButton_Left, false)) {
+                is_drawing_ellipse = true;
+                ellipse_draw_start.x = scene_x;
+                ellipse_draw_start.y = scene_y;
+            }
         }
 
         // Rect tool: finalize on mouse release (works even if mouse drifts outside window)
@@ -350,6 +364,22 @@ void ui_canvas(bool *open) {
                 ry = rect_draw_start.y - 50;
             }
             GoInamateCreateRect(rx, ry, rw, rh, selected_object_id, 64);
+            ui_toolbar_set_active_tool(TOOL_SELECT);
+        }
+
+        // Ellipse tool: finalize on mouse release
+        if (is_drawing_ellipse && igIsMouseReleased_Nil(ImGuiMouseButton_Left)) {
+            is_drawing_ellipse = false;
+            float ex = fminf(ellipse_draw_start.x, scene_x);
+            float ey = fminf(ellipse_draw_start.y, scene_y);
+            float ew = fabsf(scene_x - ellipse_draw_start.x);
+            float eh = fabsf(scene_y - ellipse_draw_start.y);
+            if (ew < 3 && eh < 3) {
+                ew = 100; eh = 100;
+                ex = ellipse_draw_start.x - 50;
+                ey = ellipse_draw_start.y - 50;
+            }
+            GoInamateCreateEllipse(ex, ey, ew, eh, selected_object_id, 64);
             ui_toolbar_set_active_tool(TOOL_SELECT);
         }
 
@@ -422,20 +452,39 @@ void ui_canvas(bool *open) {
             float new_h = new_bottom - new_top;
             float new_cx = new_left + new_w * 0.5f;
             float new_cy = new_top + new_h * 0.5f;
-            float new_ax = new_w * 0.5f;
-            float new_ay = new_h * 0.5f;
 
-            char t_json[256];
-            snprintf(t_json, sizeof(t_json),
-                "{\"x\":%g,\"y\":%g,\"ax\":%g,\"ay\":%g}",
-                (double)new_cx, (double)new_cy, (double)new_ax, (double)new_ay);
-            GoInamateObjectTransform(selected_object_id, t_json);
+            bool is_ellipse = (strcmp(resize_obj_type, "ShapeEllipse") == 0);
 
-            char d_json[128];
-            snprintf(d_json, sizeof(d_json),
-                "{\"width\":%g,\"height\":%g}",
-                (double)new_w, (double)new_h);
-            GoInamateObjectData(selected_object_id, d_json);
+            if (is_ellipse) {
+                // Ellipse: anchor stays 0,0; data uses rx/ry
+                char t_json[128];
+                snprintf(t_json, sizeof(t_json),
+                    "{\"x\":%g,\"y\":%g}",
+                    (double)new_cx, (double)new_cy);
+                GoInamateObjectTransform(selected_object_id, t_json);
+
+                char d_json[128];
+                snprintf(d_json, sizeof(d_json),
+                    "{\"rx\":%g,\"ry\":%g}",
+                    (double)(new_w * 0.5f), (double)(new_h * 0.5f));
+                GoInamateObjectData(selected_object_id, d_json);
+            } else {
+                // Rect (and others): anchor = half-size; data uses width/height
+                float new_ax = new_w * 0.5f;
+                float new_ay = new_h * 0.5f;
+
+                char t_json[256];
+                snprintf(t_json, sizeof(t_json),
+                    "{\"x\":%g,\"y\":%g,\"ax\":%g,\"ay\":%g}",
+                    (double)new_cx, (double)new_cy, (double)new_ax, (double)new_ay);
+                GoInamateObjectTransform(selected_object_id, t_json);
+
+                char d_json[128];
+                snprintf(d_json, sizeof(d_json),
+                    "{\"width\":%g,\"height\":%g}",
+                    (double)new_w, (double)new_h);
+                GoInamateObjectData(selected_object_id, d_json);
+            }
 
             if (igIsMouseReleased_Nil(ImGuiMouseButton_Left)) {
                 is_resizing = false;
@@ -533,6 +582,27 @@ void ui_canvas(bool *open) {
                 ImU32 preview_stroke = INAMATE_COL32(74, 144, 217, 200);
                 ImDrawList_AddRectFilled(dl, min_pt, max_pt, preview_fill, 0, 0);
                 ImDrawList_AddRect(dl, min_pt, max_pt, preview_stroke, 0, 0, 1.5f);
+            }
+
+            // Draw ellipse tool preview overlay
+            if (is_drawing_ellipse) {
+                float esx = scene_x, esy = scene_y;
+                float min_sx = fminf(ellipse_draw_start.x, esx);
+                float min_sy = fminf(ellipse_draw_start.y, esy);
+                float max_sx = fmaxf(ellipse_draw_start.x, esx);
+                float max_sy = fmaxf(ellipse_draw_start.y, esy);
+                ImVec2 center = {
+                    view_origin.x + (min_sx + max_sx) * 0.5f * zoom,
+                    view_origin.y + (min_sy + max_sy) * 0.5f * zoom,
+                };
+                ImVec2 radii = {
+                    (max_sx - min_sx) * 0.5f * zoom,
+                    (max_sy - min_sy) * 0.5f * zoom,
+                };
+                ImU32 preview_fill = INAMATE_COL32(74, 144, 217, 40);
+                ImU32 preview_stroke = INAMATE_COL32(74, 144, 217, 200);
+                ImDrawList_AddEllipseFilled(dl, center, radii, preview_fill, 0, 0);
+                ImDrawList_AddEllipse(dl, center, radii, preview_stroke, 0, 0, 1.5f);
             }
 
             // Selection indicator: outline + corner/edge handles

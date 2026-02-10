@@ -569,6 +569,117 @@ func GoInamateCreateRect(x, y, w, h C.float, outID *C.char, outIDLen C.int) C.in
 	return 0
 }
 
+//export GoInamateCreateEllipse
+func GoInamateCreateEllipse(x, y, w, h C.float, outID *C.char, outIDLen C.int) C.int {
+	ws.mu.Lock()
+	ds := ws.docState
+	connected := ws.connected
+	conn := ws.conn
+	projectID := ws.projectID
+	ws.mu.Unlock()
+
+	if ds == nil {
+		fmt.Println("object.create: no document state")
+		return -1
+	}
+
+	doc := ds.GetDocument()
+	if len(doc.Project.Scenes) == 0 {
+		fmt.Println("object.create: no scenes")
+		return -1
+	}
+	scene, ok := doc.Scenes[doc.Project.Scenes[0]]
+	if !ok {
+		fmt.Println("object.create: scene not found")
+		return -1
+	}
+	parentID := scene.Root
+
+	objectID := newUUID()
+	gw := float64(w)
+	gh := float64(h)
+	rx := gw / 2
+	ry := gh / 2
+
+	obj := document.ObjectNode{
+		ID:       objectID,
+		Type:     document.ObjectTypeShapeEllipse,
+		Parent:   &parentID,
+		Children: []string{},
+		Transform: document.Transform{
+			X: float64(x) + rx, Y: float64(y) + ry,
+			SX: 1, SY: 1, R: 0,
+			AX: 0, AY: 0,
+			SkewX: 0, SkewY: 0,
+		},
+		Style: document.Style{
+			Fill:        "#4a90d9",
+			Stroke:      "#2d5a87",
+			StrokeWidth: 2,
+			Opacity:     1,
+		},
+		Visible: true,
+		Locked:  false,
+		Data:    json.RawMessage(fmt.Sprintf(`{"rx":%g,"ry":%g}`, rx, ry)),
+	}
+
+	objJSON, err := json.Marshal(obj)
+	if err != nil {
+		fmt.Println("object.create: marshal object error:", err)
+		return -1
+	}
+
+	op := collab.Operation{
+		Type:     "object.create",
+		Object:   objJSON,
+		ParentID: parentID,
+	}
+
+	if _, err := ds.ApplyOperation(op); err != nil {
+		fmt.Println("object.create: apply error:", err)
+		return -1
+	}
+
+	docJSON, err := json.Marshal(ds.GetDocument())
+	if err != nil {
+		fmt.Println("object.create: marshal doc error:", err)
+		return -1
+	}
+
+	engMu.Lock()
+	if err := eng.UpdateDocument(string(docJSON)); err != nil {
+		fmt.Println("object.create: engine update error:", err)
+	}
+	eng.SetSelection([]string{objectID})
+	engMu.Unlock()
+
+	selectedMu.Lock()
+	selectedID = objectID
+	selectedMu.Unlock()
+
+	if outID != nil && outIDLen > 0 {
+		copyToCharArray(outID, int(outIDLen), objectID)
+	}
+
+	if connected && conn != nil {
+		payload, err := json.Marshal(op)
+		if err == nil {
+			msg, err := json.Marshal(collab.Message{
+				Type:      collab.TypeOpSubmit,
+				ProjectID: projectID,
+				Payload:   payload,
+			})
+			if err == nil {
+				if err := conn.Write(ws.ctx, websocket.MessageText, msg); err != nil {
+					fmt.Println("object.create: ws write error:", err)
+				}
+			}
+		}
+	}
+
+	return 0
+}
+
 //export GoInamateDeleteAll
 func GoInamateDeleteAll() C.int {
 	ws.mu.Lock()
