@@ -17,6 +17,8 @@ static Arena frame_arena = {0};
 static float canvas_zoom = 1.0f;
 static ImVec2 canvas_pan = {0};
 
+static CanvasSceneInfo last_scene_info = {0};
+
 // Pack RGBA into ImU32 (ImGui's ABGR byte order)
 #define INAMATE_COL32(r,g,b,a) (((ImU32)(a)<<24) | ((ImU32)(b)<<16) | ((ImU32)(g)<<8) | ((ImU32)(r)))
 
@@ -133,6 +135,10 @@ void ui_canvas_zoom_reset(void) {
     canvas_pan = (ImVec2){0, 0};
 }
 
+const CanvasSceneInfo *ui_canvas_get_scene_info(void) {
+    return &last_scene_info;
+}
+
 void ui_canvas(bool *open) {
     igPushStyleVar_Vec2(ImGuiStyleVar_WindowPadding, (ImVec2){0, 0});
     if (igBegin("Canvas", open, ImGuiWindowFlags_None)) {
@@ -226,6 +232,12 @@ void ui_canvas(bool *open) {
             ImDrawList *dl = igGetWindowDrawList();
 
             InDrawFrame frame = GoInamateEngineRenderFrame(&frame_arena);
+
+            // Cache scene info for properties panel
+            memcpy(last_scene_info.scene_id, frame.scene_id, 64);
+            memcpy(last_scene_info.background, frame.background, 16);
+            last_scene_info.scene_width = frame.scene_width;
+            last_scene_info.scene_height = frame.scene_height;
 
             // Draw scene background and clip to scene bounds
             if (frame.scene_width > 0 && frame.scene_height > 0) {

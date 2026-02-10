@@ -1,10 +1,17 @@
 // Properties panel — static layout with placeholder values
 
 #include <float.h>
+#include <stdio.h>
+#include <string.h>
 
 #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
 #include "cimgui.h"
 
+#include "arena.h"
+#define ARENA_FWD_DECL_ // suppress redeclaration in libgo.h
+#include "libgo.h"
+
+#include "canvas.h"
 #include "properties.h"
 
 // Placeholder state (will be replaced with real data binding later)
@@ -89,8 +96,32 @@ static void ui_scene_properties(void)
 
     if (igCollapsingHeader_TreeNodeFlags("Background", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (begin_prop_table()) {
+            // Sync from engine scene info each frame
+            const CanvasSceneInfo *si = ui_canvas_get_scene_info();
+            if (si->background[0] == '#' && strlen(si->background) >= 7) {
+                unsigned int r, g, b;
+                sscanf(si->background + 1, "%02x%02x%02x", &r, &g, &b);
+                props.scene_bg[0] = r / 255.0f;
+                props.scene_bg[1] = g / 255.0f;
+                props.scene_bg[2] = b / 255.0f;
+            }
+
             PROP_ROW_BEGIN("Color");
-            igColorEdit3("##bg_color", props.scene_bg, ImGuiColorEditFlags_DisplayHex);
+            if (igColorEdit3("##bg_color", props.scene_bg, ImGuiColorEditFlags_DisplayHex)) {
+                // User changed color — convert back to hex and send scene.update
+                int cr = (int)(props.scene_bg[0] * 255.0f + 0.5f);
+                int cg = (int)(props.scene_bg[1] * 255.0f + 0.5f);
+                int cb = (int)(props.scene_bg[2] * 255.0f + 0.5f);
+                if (cr > 255) cr = 255; if (cg > 255) cg = 255; if (cb > 255) cb = 255;
+
+                char hex[16];
+                snprintf(hex, sizeof(hex), "#%02x%02x%02x", cr, cg, cb);
+
+                char changes[64];
+                snprintf(changes, sizeof(changes), "{\"background\":\"%s\"}", hex);
+
+                GoInamateSceneUpdate((char *)si->scene_id, changes);
+            }
             end_prop_table();
         }
     }

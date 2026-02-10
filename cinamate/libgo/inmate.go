@@ -378,6 +378,69 @@ func GoInamateDisconnect() {
 	fmt.Println("ws: disconnected")
 }
 
+// --- Scene Update API ---
+
+//export GoInamateSceneUpdate
+func GoInamateSceneUpdate(sceneID, changesJSON *C.char) C.int {
+	goSceneID := C.GoString(sceneID)
+	goChanges := C.GoString(changesJSON)
+
+	ws.mu.Lock()
+	ds := ws.docState
+	connected := ws.connected
+	conn := ws.conn
+	projectID := ws.projectID
+	ws.mu.Unlock()
+
+	if ds == nil {
+		fmt.Println("scene.update: no document state")
+		return -1
+	}
+
+	op := collab.Operation{
+		Type:    "scene.update",
+		SceneID: goSceneID,
+		Changes: json.RawMessage(goChanges),
+	}
+
+	if _, err := ds.ApplyOperation(op); err != nil {
+		fmt.Println("scene.update: apply error:", err)
+		return -1
+	}
+
+	// Feed updated document back to engine
+	docJSON, err := json.Marshal(ds.GetDocument())
+	if err != nil {
+		fmt.Println("scene.update: marshal error:", err)
+		return -1
+	}
+
+	engMu.Lock()
+	if err := eng.UpdateDocument(string(docJSON)); err != nil {
+		fmt.Println("scene.update: engine update error:", err)
+	}
+	engMu.Unlock()
+
+	// Send to server via websocket
+	if connected && conn != nil {
+		payload, err := json.Marshal(op)
+		if err == nil {
+			msg, err := json.Marshal(collab.Message{
+				Type:      collab.TypeOpSubmit,
+				ProjectID: projectID,
+				Payload:   payload,
+			})
+			if err == nil {
+				if err := conn.Write(ws.ctx, websocket.MessageText, msg); err != nil {
+					fmt.Println("scene.update: ws write error:", err)
+				}
+			}
+		}
+	}
+
+	return 0
+}
+
 // --- Presence API ---
 
 //export GoInamateSendCursor
