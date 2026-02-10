@@ -1,5 +1,7 @@
 // Properties panel — static layout with placeholder values
 
+#include <float.h>
+
 #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
 #include "cimgui.h"
 
@@ -42,22 +44,55 @@ static struct {
     .opacity = 100.0f,
 };
 
+// Left-aligned label row helper: label on left, widget fills right column.
+// Call before the input widget, then igTableNextColumn() + widget + igTableNextRow().
+#define PROP_ROW_BEGIN(label) \
+    igTableNextRow(0, 0);    \
+    igTableNextColumn();     \
+    igAlignTextToFramePadding(); \
+    igTextUnformatted(label, NULL); \
+    igTableNextColumn();     \
+    igSetNextItemWidth(-FLT_MIN)
+
+static bool begin_prop_table(void)
+{
+    return igBeginTable("##prop", 2, ImGuiTableFlags_None, (ImVec2){0,0}, 0);
+}
+
+static void end_prop_table(void)
+{
+    igEndTable();
+}
+
 static void ui_scene_properties(void)
 {
     igText("Artboard");
     igSeparator();
 
     if (igCollapsingHeader_TreeNodeFlags("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
-        igInputText("Name", props.scene_name, sizeof(props.scene_name), 0, NULL, NULL);
+        if (begin_prop_table()) {
+            PROP_ROW_BEGIN("Name");
+            igInputText("##name", props.scene_name, sizeof(props.scene_name), 0, NULL, NULL);
+            end_prop_table();
+        }
     }
 
     if (igCollapsingHeader_TreeNodeFlags("Dimensions", ImGuiTreeNodeFlags_DefaultOpen)) {
-        igInputInt("Width", &props.scene_width, 1, 10, 0);
-        igInputInt("Height", &props.scene_height, 1, 10, 0);
+        if (begin_prop_table()) {
+            PROP_ROW_BEGIN("Width");
+            igInputInt("##width", &props.scene_width, 1, 10, 0);
+            PROP_ROW_BEGIN("Height");
+            igInputInt("##height", &props.scene_height, 1, 10, 0);
+            end_prop_table();
+        }
     }
 
     if (igCollapsingHeader_TreeNodeFlags("Background", ImGuiTreeNodeFlags_DefaultOpen)) {
-        igColorEdit3("Color", props.scene_bg, 0);
+        if (begin_prop_table()) {
+            PROP_ROW_BEGIN("Color");
+            igColorEdit3("##bg_color", props.scene_bg, ImGuiColorEditFlags_DisplayHex);
+            end_prop_table();
+        }
     }
 }
 
@@ -66,27 +101,51 @@ static void ui_object_properties(void)
     igText("Properties");
     igSeparator();
 
-    igText("Type: Rectangle");
-    igText("ID: obj_001");
+    if (begin_prop_table()) {
+        PROP_ROW_BEGIN("Type");
+        igTextUnformatted("Rectangle", NULL);
+        PROP_ROW_BEGIN("ID");
+        igTextUnformatted("obj_001", NULL);
+        end_prop_table();
+    }
     igSeparator();
 
     if (igCollapsingHeader_TreeNodeFlags("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
-        igDragFloat("X", &props.pos_x, 1.0f, 0.0f, 0.0f, "%.1f", 0);
-        igDragFloat("Y", &props.pos_y, 1.0f, 0.0f, 0.0f, "%.1f", 0);
-        igDragFloat("Scale X", &props.scale_x, 0.01f, 0.0f, 0.0f, "%.2f", 0);
-        igDragFloat("Scale Y", &props.scale_y, 0.01f, 0.0f, 0.0f, "%.2f", 0);
-        igDragFloat("Rotation", &props.rotation, 1.0f, 0.0f, 0.0f, "%.1f", 0);
-        igDragFloat("Skew X", &props.skew_x, 1.0f, 0.0f, 0.0f, "%.1f", 0);
-        igDragFloat("Skew Y", &props.skew_y, 1.0f, 0.0f, 0.0f, "%.1f", 0);
-        igDragFloat("Anchor X", &props.anchor_x, 0.01f, 0.0f, 0.0f, "%.2f", 0);
-        igDragFloat("Anchor Y", &props.anchor_y, 0.01f, 0.0f, 0.0f, "%.2f", 0);
+        if (begin_prop_table()) {
+            PROP_ROW_BEGIN("X");
+            igDragFloat("##x", &props.pos_x, 1.0f, 0.0f, 0.0f, "%.1f", 0);
+            PROP_ROW_BEGIN("Y");
+            igDragFloat("##y", &props.pos_y, 1.0f, 0.0f, 0.0f, "%.1f", 0);
+            PROP_ROW_BEGIN("Scale X");
+            igDragFloat("##sx", &props.scale_x, 0.01f, 0.0f, 0.0f, "%.2f", 0);
+            PROP_ROW_BEGIN("Scale Y");
+            igDragFloat("##sy", &props.scale_y, 0.01f, 0.0f, 0.0f, "%.2f", 0);
+            PROP_ROW_BEGIN("Rotation");
+            igDragFloat("##rot", &props.rotation, 1.0f, 0.0f, 0.0f, "%.1f", 0);
+            PROP_ROW_BEGIN("Skew X");
+            igDragFloat("##skx", &props.skew_x, 1.0f, 0.0f, 0.0f, "%.1f", 0);
+            PROP_ROW_BEGIN("Skew Y");
+            igDragFloat("##sky", &props.skew_y, 1.0f, 0.0f, 0.0f, "%.1f", 0);
+            PROP_ROW_BEGIN("Anchor X");
+            igDragFloat("##ax", &props.anchor_x, 0.01f, 0.0f, 0.0f, "%.2f", 0);
+            PROP_ROW_BEGIN("Anchor Y");
+            igDragFloat("##ay", &props.anchor_y, 0.01f, 0.0f, 0.0f, "%.2f", 0);
+            end_prop_table();
+        }
     }
 
     if (igCollapsingHeader_TreeNodeFlags("Style", ImGuiTreeNodeFlags_DefaultOpen)) {
-        igColorEdit3("Fill", props.fill, 0);
-        igColorEdit3("Stroke", props.stroke, 0);
-        igDragFloat("Stroke W", &props.stroke_width, 0.1f, 0.0f, 0.0f, "%.1f", 0);
-        igDragFloat("Opacity", &props.opacity, 1.0f, 0.0f, 100.0f, "%.0f%%", 0);
+        if (begin_prop_table()) {
+            PROP_ROW_BEGIN("Fill");
+            igColorEdit3("##fill", props.fill, ImGuiColorEditFlags_DisplayHex);
+            PROP_ROW_BEGIN("Stroke");
+            igColorEdit3("##stroke", props.stroke, ImGuiColorEditFlags_DisplayHex);
+            PROP_ROW_BEGIN("Stroke W");
+            igDragFloat("##strokew", &props.stroke_width, 0.1f, 0.0f, 0.0f, "%.1f", 0);
+            PROP_ROW_BEGIN("Opacity");
+            igDragFloat("##opacity", &props.opacity, 1.0f, 0.0f, 100.0f, "%.0f%%", 0);
+            end_prop_table();
+        }
     }
 }
 
