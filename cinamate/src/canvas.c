@@ -153,6 +153,10 @@ const char *ui_canvas_get_selected_id(void) {
     return selected_object_id;
 }
 
+void ui_canvas_clear_selection(void) {
+    selected_object_id[0] = '\0';
+}
+
 void ui_canvas(bool *open) {
     igPushStyleVar_Vec2(ImGuiStyleVar_WindowPadding, (ImVec2){0, 0});
     if (igBegin("Canvas", open, ImGuiWindowFlags_None)) {

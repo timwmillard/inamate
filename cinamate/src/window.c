@@ -112,10 +112,16 @@ void ui_window(void)
             if (igMenuItem_Bool("Duplicate", "Cmd+D", false, true)) {
             }
             igSeparator();
-            if (igMenuItem_Bool("Delete", "Del", false, true)) {
+            if (igMenuItem_Bool("Delete", "Del", false, ui_canvas_get_selected_id()[0] != '\0')) {
+                const char *sel = ui_canvas_get_selected_id();
+                if (sel[0]) {
+                    GoInamateDeleteObject((char *)sel);
+                    ui_canvas_clear_selection();
+                }
             }
             if (igMenuItem_Bool("Delete All", "", false, true)) {
                 GoInamateDeleteAll();
+                ui_canvas_clear_selection();
             }
             igSeparator();
             if (igMenuItem_Bool("Select All", "Del", false, true)) {
@@ -174,6 +180,16 @@ void ui_window(void)
         }
 
         igEndMainMenuBar();
+    }
+
+    // Keyboard shortcuts (when no text input is active)
+    if (!igGetIO_Nil()->WantTextInput) {
+        bool del = igIsKeyPressed_Bool(ImGuiKey_Delete, false)
+                || igIsKeyPressed_Bool(ImGuiKey_Backspace, false);
+        if (del && ui_canvas_get_selected_id()[0]) {
+            GoInamateDeleteObject((char *)ui_canvas_get_selected_id());
+            ui_canvas_clear_selection();
+        }
     }
 
     // Dockspace
