@@ -61,6 +61,26 @@ static struct {
     igTableNextColumn();     \
     igSetNextItemWidth(-FLT_MIN)
 
+// Matches frontend Section component: heading then content then bottom border
+static void section_heading(const char *title)
+{
+    igSpacing();
+    igTextDisabled(title);
+}
+
+static void section_end(void)
+{
+    igSpacing();
+    igSeparator();
+}
+
+// Matches frontend: text-xs font-semibold uppercase tracking-wider
+static void panel_title(const char *title)
+{
+    igTextDisabled(title);
+    igSpacing();
+}
+
 static bool begin_prop_table(void)
 {
     return igBeginTable("##prop", 2, ImGuiTableFlags_None, (ImVec2){0,0}, 0);
@@ -80,8 +100,7 @@ static void ui_scene_properties(void)
 {
     const CanvasSceneInfo *si = ui_canvas_get_scene_info();
 
-    igText("Artboard");
-    igSeparator();
+    panel_title("ARTBOARD");
 
     // Sync scene info from engine each frame (when not actively editing)
     if (!igIsAnyItemActive()) {
@@ -93,69 +112,69 @@ static void ui_scene_properties(void)
         props.scene_height = si->scene_height;
     }
 
-    if (igCollapsingHeader_TreeNodeFlags("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (begin_prop_table()) {
-            PROP_ROW_BEGIN("Name");
-            igInputText("##name", props.scene_name, sizeof(props.scene_name), 0, NULL, NULL);
-            if (igIsItemDeactivatedAfterEdit()) {
-                char changes[256];
-                snprintf(changes, sizeof(changes), "{\"name\":\"%s\"}", props.scene_name);
-                send_scene_update(si->scene_id, changes);
-            }
-            end_prop_table();
+    section_heading("Scene");
+    if (begin_prop_table()) {
+        PROP_ROW_BEGIN("Name");
+        igInputText("##name", props.scene_name, sizeof(props.scene_name), 0, NULL, NULL);
+        if (igIsItemDeactivatedAfterEdit()) {
+            char changes[256];
+            snprintf(changes, sizeof(changes), "{\"name\":\"%s\"}", props.scene_name);
+            send_scene_update(si->scene_id, changes);
         }
+        end_prop_table();
     }
+    section_end();
 
-    if (igCollapsingHeader_TreeNodeFlags("Dimensions", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (begin_prop_table()) {
-            PROP_ROW_BEGIN("Width");
-            igInputInt("##width", &props.scene_width, 1, 10, 0);
-            if (igIsItemDeactivatedAfterEdit()) {
-                if (props.scene_width < 1) props.scene_width = 1;
-                char changes[64];
-                snprintf(changes, sizeof(changes), "{\"width\":%d}", props.scene_width);
-                send_scene_update(si->scene_id, changes);
-            }
-            PROP_ROW_BEGIN("Height");
-            igInputInt("##height", &props.scene_height, 1, 10, 0);
-            if (igIsItemDeactivatedAfterEdit()) {
-                if (props.scene_height < 1) props.scene_height = 1;
-                char changes[64];
-                snprintf(changes, sizeof(changes), "{\"height\":%d}", props.scene_height);
-                send_scene_update(si->scene_id, changes);
-            }
-            end_prop_table();
+    section_heading("Dimensions");
+    if (begin_prop_table()) {
+        PROP_ROW_BEGIN("Width");
+        igInputInt("##width", &props.scene_width, 1, 10, 0);
+        if (igIsItemDeactivatedAfterEdit()) {
+            if (props.scene_width < 1) props.scene_width = 1;
+            char changes[64];
+            snprintf(changes, sizeof(changes), "{\"width\":%d}", props.scene_width);
+            send_scene_update(si->scene_id, changes);
         }
-    }
-
-    if (igCollapsingHeader_TreeNodeFlags("Background", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (begin_prop_table()) {
-            if (si->background[0] == '#' && strlen(si->background) >= 7) {
-                unsigned int r, g, b;
-                sscanf(si->background + 1, "%02x%02x%02x", &r, &g, &b);
-                props.scene_bg[0] = r / 255.0f;
-                props.scene_bg[1] = g / 255.0f;
-                props.scene_bg[2] = b / 255.0f;
-            }
-
-            PROP_ROW_BEGIN("Color");
-            if (igColorEdit3("##bg_color", props.scene_bg, ImGuiColorEditFlags_DisplayHex)) {
-                int cr = (int)(props.scene_bg[0] * 255.0f + 0.5f);
-                int cg = (int)(props.scene_bg[1] * 255.0f + 0.5f);
-                int cb = (int)(props.scene_bg[2] * 255.0f + 0.5f);
-                if (cr > 255) cr = 255; if (cg > 255) cg = 255; if (cb > 255) cb = 255;
-
-                char hex[16];
-                snprintf(hex, sizeof(hex), "#%02x%02x%02x", cr, cg, cb);
-
-                char changes[64];
-                snprintf(changes, sizeof(changes), "{\"background\":\"%s\"}", hex);
-
-                send_scene_update(si->scene_id, changes);
-            }
-            end_prop_table();
+        PROP_ROW_BEGIN("Height");
+        igInputInt("##height", &props.scene_height, 1, 10, 0);
+        if (igIsItemDeactivatedAfterEdit()) {
+            if (props.scene_height < 1) props.scene_height = 1;
+            char changes[64];
+            snprintf(changes, sizeof(changes), "{\"height\":%d}", props.scene_height);
+            send_scene_update(si->scene_id, changes);
         }
+        end_prop_table();
     }
+    section_end();
+
+    section_heading("Background");
+    if (begin_prop_table()) {
+        if (si->background[0] == '#' && strlen(si->background) >= 7) {
+            unsigned int r, g, b;
+            sscanf(si->background + 1, "%02x%02x%02x", &r, &g, &b);
+            props.scene_bg[0] = r / 255.0f;
+            props.scene_bg[1] = g / 255.0f;
+            props.scene_bg[2] = b / 255.0f;
+        }
+
+        PROP_ROW_BEGIN("Color");
+        if (igColorEdit3("##bg_color", props.scene_bg, ImGuiColorEditFlags_DisplayHex)) {
+            int cr = (int)(props.scene_bg[0] * 255.0f + 0.5f);
+            int cg = (int)(props.scene_bg[1] * 255.0f + 0.5f);
+            int cb = (int)(props.scene_bg[2] * 255.0f + 0.5f);
+            if (cr > 255) cr = 255; if (cg > 255) cg = 255; if (cb > 255) cb = 255;
+
+            char hex[16];
+            snprintf(hex, sizeof(hex), "#%02x%02x%02x", cr, cg, cb);
+
+            char changes[64];
+            snprintf(changes, sizeof(changes), "{\"background\":\"%s\"}", hex);
+
+            send_scene_update(si->scene_id, changes);
+        }
+        end_prop_table();
+    }
+    section_end();
 }
 
 static void ui_object_properties(void)
