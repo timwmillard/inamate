@@ -5,3 +5,6 @@
 #include "sokol_glue.h"
 #include "sokol_log.h"
 
+#define ARENA_IMPLEMENTATION
+#include "arena.h"
+

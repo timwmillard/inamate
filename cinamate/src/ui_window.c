@@ -4,13 +4,14 @@
 #include <string.h>
 
 #include "sokol_app.h"
-#define ARENA_IMPLEMENTATION
 #include "arena.h"
 #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
 #include "cimgui.h"
 
+#define ARENA_FWD_DECL_ // suppress redeclaration in libgo.h
 #include "libgo.h"
 
+static Arena frame_arena = {0};
 
 static struct {
     // GUI
@@ -324,7 +325,7 @@ void ui_window(void)
             if (GoInamateIsDocLoaded()) {
                 ImDrawList *dl = igGetWindowDrawList();
 
-                InDrawFrame frame = GoInamateEngineRenderFrame();
+                InDrawFrame frame = GoInamateEngineRenderFrame(&frame_arena);
 
                 // Draw scene background and clip to scene bounds
                 if (frame.scene_width > 0 && frame.scene_height > 0) {
@@ -351,12 +352,11 @@ void ui_window(void)
                 if (frame.scene_width > 0 && frame.scene_height > 0) {
                     ImDrawList_PopClipRect(dl);
                 }
-                GoInamateDrawFrameFree(&frame);
             }
 
             // Draw remote user cursors
             {
-                InPresenceList presences = GoInamateGetPresences();
+                InPresenceList presences = GoInamateGetPresences(&frame_arena);
                 if (presences.count > 0) {
                     ImDrawList *dl = igGetWindowDrawList();
 
@@ -407,8 +407,8 @@ void ui_window(void)
                         }
                     }
                 }
-                GoInamatePresencesFree(&presences);
             }
+
         }
         igEnd();
     }
@@ -427,5 +427,7 @@ void ui_window(void)
     if (window_state.show_demo) {
         igShowDemoWindow(&window_state.show_demo);
     }
+
+    arena_reset(&frame_arena);
 }
 

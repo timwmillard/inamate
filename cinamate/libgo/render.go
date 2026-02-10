@@ -4,6 +4,13 @@ package main
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef ARENA_FWD_DECL_
+#define ARENA_FWD_DECL_
+typedef struct Region Region;
+typedef struct { Region *begin, *end; } Arena;
+extern void *arena_alloc(Arena *a, size_t size_bytes);
+#endif
+
 typedef struct {
     char type;        // 'M', 'L', 'C', 'Q', 'Z'
     int num_coords;
@@ -59,14 +66,14 @@ func copyToCharArray(dst *C.char, size int, src string) {
 	buf[len(src)] = 0
 }
 
-// packPathCommands converts a Go []PathCommand into a C-allocated InPathCmd array.
-func packPathCommands(path []engine.PathCommand) (*C.InPathCmd, C.int) {
+// packPathCommands converts a Go []PathCommand into an arena-allocated InPathCmd array.
+func packPathCommands(a *C.Arena, path []engine.PathCommand) (*C.InPathCmd, C.int) {
 	n := len(path)
 	if n == 0 {
 		return nil, 0
 	}
 
-	arr := (*C.InPathCmd)(C.malloc(C.size_t(n) * C.size_t(unsafe.Sizeof(C.InPathCmd{}))))
+	arr := (*C.InPathCmd)(C.arena_alloc(a, C.size_t(n)*C.size_t(unsafe.Sizeof(C.InPathCmd{}))))
 	slice := unsafe.Slice(arr, n)
 
 	for i, pc := range path {
@@ -114,10 +121,10 @@ func toFloat64(v interface{}) (float64, bool) {
 }
 
 // GoInamateEngineRenderFrame returns the current frame's draw commands as C structs.
-// The caller must free the result with GoInamateDrawFrameFree.
+// Memory is allocated from the provided arena; caller resets the arena when done.
 //
 //export GoInamateEngineRenderFrame
-func GoInamateEngineRenderFrame() C.InDrawFrame {
+func GoInamateEngineRenderFrame(a *C.Arena) C.InDrawFrame {
 	engMu.Lock()
 	scene := eng.GetSceneInfo()
 	commands := eng.RenderCommands()
@@ -131,7 +138,7 @@ func GoInamateEngineRenderFrame() C.InDrawFrame {
 		return frame
 	}
 
-	arr := (*C.InDrawCmd)(C.malloc(C.size_t(n) * C.size_t(unsafe.Sizeof(C.InDrawCmd{}))))
+	arr := (*C.InDrawCmd)(C.arena_alloc(a, C.size_t(n)*C.size_t(unsafe.Sizeof(C.InDrawCmd{}))))
 	slice := unsafe.Slice(arr, n)
 
 	for i, dc := range commands {
@@ -154,7 +161,7 @@ func GoInamateEngineRenderFrame() C.InDrawFrame {
 		}
 
 		// Pack path commands
-		cmd.path, cmd.path_len = packPathCommands(dc.Path)
+		cmd.path, cmd.path_len = packPathCommands(a, dc.Path)
 	}
 
 	var frame C.InDrawFrame
@@ -166,22 +173,3 @@ func GoInamateEngineRenderFrame() C.InDrawFrame {
 	return frame
 }
 
-// GoInamateDrawFrameFree frees all memory allocated by GoInamateEngineRenderFrame.
-//
-//export GoInamateDrawFrameFree
-func GoInamateDrawFrameFree(frame *C.InDrawFrame) {
-	if frame == nil || frame.commands == nil {
-		return
-	}
-
-	n := int(frame.count)
-	slice := unsafe.Slice(frame.commands, n)
-	for i := 0; i < n; i++ {
-		if slice[i].path != nil {
-			C.free(unsafe.Pointer(slice[i].path))
-		}
-	}
-	C.free(unsafe.Pointer(frame.commands))
-	frame.commands = nil
-	frame.count = 0
-}

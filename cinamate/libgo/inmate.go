@@ -4,6 +4,13 @@ package main
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef ARENA_FWD_DECL_
+#define ARENA_FWD_DECL_
+typedef struct Region Region;
+typedef struct { Region *begin, *end; } Arena;
+extern void *arena_alloc(Arena *a, size_t size_bytes);
+#endif
+
 typedef struct {
     char user_id[64];
     char display_name[64];
@@ -50,8 +57,8 @@ type presenceInfo struct {
 
 var (
 	presencesMu  sync.Mutex
-	presencesMap  = make(map[string]*presenceInfo)
-	localUserID   string
+	presencesMap = make(map[string]*presenceInfo)
+	localUserID  string
 )
 
 var presenceColors = []string{
@@ -407,7 +414,7 @@ func GoInamateSendCursor(x, y C.float) {
 }
 
 //export GoInamateGetPresences
-func GoInamateGetPresences() C.InPresenceList {
+func GoInamateGetPresences(a *C.Arena) C.InPresenceList {
 	presencesMu.Lock()
 	localID := localUserID
 
@@ -424,7 +431,7 @@ func GoInamateGetPresences() C.InPresenceList {
 		return C.InPresenceList{}
 	}
 
-	arr := (*C.InPresence)(C.malloc(C.size_t(n) * C.size_t(unsafe.Sizeof(C.InPresence{}))))
+	arr := (*C.InPresence)(C.arena_alloc(a, C.size_t(n)*C.size_t(unsafe.Sizeof(C.InPresence{}))))
 	slice := unsafe.Slice(arr, n)
 
 	for i, p := range entries {
@@ -444,14 +451,4 @@ func GoInamateGetPresences() C.InPresenceList {
 		entries: arr,
 		count:   C.int(n),
 	}
-}
-
-//export GoInamatePresencesFree
-func GoInamatePresencesFree(list *C.InPresenceList) {
-	if list == nil || list.entries == nil {
-		return
-	}
-	C.free(unsafe.Pointer(list.entries))
-	list.entries = nil
-	list.count = 0
 }
