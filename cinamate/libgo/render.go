@@ -32,6 +32,17 @@ typedef struct {
 } InDrawCmd;
 
 typedef struct {
+    char id[64];
+    char type[32];
+    float x, y, sx, sy, r, ax, ay, skew_x, skew_y;
+    char fill[16];
+    char stroke[16];
+    float stroke_width;
+    float opacity;
+    float data_width, data_height;
+} InObjectInfo;
+
+typedef struct {
     InDrawCmd *commands;
     int count;
     char scene_id[64];
@@ -43,6 +54,7 @@ typedef struct {
 */
 import "C"
 import (
+	"encoding/json"
 	"unsafe"
 
 	"github.com/inamate/inamate/backend-go/engine"
@@ -176,5 +188,68 @@ func GoInamateEngineRenderFrame(a *C.Arena) C.InDrawFrame {
 	frame.scene_width = C.int(scene.Width)
 	frame.scene_height = C.int(scene.Height)
 	return frame
+}
+
+// GoInamateGetSelectedObject returns the currently selected object's properties.
+// Returns a zeroed struct if nothing is selected.
+//
+//export GoInamateGetSelectedObject
+func GoInamateGetSelectedObject() C.InObjectInfo {
+	var info C.InObjectInfo
+	C.memset(unsafe.Pointer(&info), 0, C.size_t(unsafe.Sizeof(info)))
+
+	selectedMu.Lock()
+	id := selectedID
+	selectedMu.Unlock()
+
+	if id == "" {
+		return info
+	}
+
+	ws.mu.Lock()
+	ds := ws.docState
+	ws.mu.Unlock()
+
+	if ds == nil {
+		return info
+	}
+
+	doc := ds.GetDocument()
+	obj, ok := doc.Objects[id]
+	if !ok {
+		return info
+	}
+
+	copyToCharArray(&info.id[0], 64, obj.ID)
+	copyToCharArray(&info._type[0], 32, string(obj.Type))
+
+	info.x = C.float(obj.Transform.X)
+	info.y = C.float(obj.Transform.Y)
+	info.sx = C.float(obj.Transform.SX)
+	info.sy = C.float(obj.Transform.SY)
+	info.r = C.float(obj.Transform.R)
+	info.ax = C.float(obj.Transform.AX)
+	info.ay = C.float(obj.Transform.AY)
+	info.skew_x = C.float(obj.Transform.SkewX)
+	info.skew_y = C.float(obj.Transform.SkewY)
+
+	copyToCharArray(&info.fill[0], 16, obj.Style.Fill)
+	copyToCharArray(&info.stroke[0], 16, obj.Style.Stroke)
+	info.stroke_width = C.float(obj.Style.StrokeWidth)
+	info.opacity = C.float(obj.Style.Opacity)
+
+	// Parse data for width/height (ShapeRect)
+	if len(obj.Data) > 0 {
+		var data struct {
+			Width  float64 `json:"width"`
+			Height float64 `json:"height"`
+		}
+		if json.Unmarshal(obj.Data, &data) == nil {
+			info.data_width = C.float(data.Width)
+			info.data_height = C.float(data.Height)
+		}
+	}
+
+	return info
 }
 

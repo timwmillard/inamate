@@ -18,5 +18,6 @@ void ui_canvas_zoom_in(void);
 void ui_canvas_zoom_out(void);
 void ui_canvas_zoom_reset(void);
 const CanvasSceneInfo *ui_canvas_get_scene_info(void);
+const char *ui_canvas_get_selected_id(void);
 
 #endif

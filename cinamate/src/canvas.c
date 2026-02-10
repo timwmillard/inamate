@@ -23,6 +23,12 @@ static CanvasSceneInfo last_scene_info = {0};
 static bool is_drawing_rect = false;
 static ImVec2 rect_draw_start = {0};
 
+static char selected_object_id[64] = {0};
+
+static bool is_dragging_selection = false;
+static ImVec2 drag_start_scene = {0};
+static float drag_initial_x = 0, drag_initial_y = 0;
+
 // Pack RGBA into ImU32 (ImGui's ABGR byte order)
 #define INAMATE_COL32(r,g,b,a) (((ImU32)(a)<<24) | ((ImU32)(b)<<16) | ((ImU32)(g)<<8) | ((ImU32)(r)))
 
@@ -143,6 +149,10 @@ const CanvasSceneInfo *ui_canvas_get_scene_info(void) {
     return &last_scene_info;
 }
 
+const char *ui_canvas_get_selected_id(void) {
+    return selected_object_id;
+}
+
 void ui_canvas(bool *open) {
     igPushStyleVar_Vec2(ImGuiStyleVar_WindowPadding, (ImVec2){0, 0});
     if (igBegin("Canvas", open, ImGuiWindowFlags_None)) {
@@ -189,8 +199,26 @@ void ui_canvas(bool *open) {
                 }
             }
 
-            // Rect tool: start drawing
             ToolType tool = ui_toolbar_get_active_tool();
+
+            // Select tool: click to select/deselect, initiate drag
+            if (tool == TOOL_SELECT && igIsMouseClicked_Bool(ImGuiMouseButton_Left, false)) {
+                char hit_id[64] = {0};
+                int hit = GoInamateHitTest(scene_x, scene_y, hit_id, 64);
+                if (hit) {
+                    memcpy(selected_object_id, hit_id, 64);
+                    is_dragging_selection = true;
+                    drag_start_scene = (ImVec2){scene_x, scene_y};
+                    InObjectInfo info = GoInamateGetSelectedObject();
+                    drag_initial_x = info.x;
+                    drag_initial_y = info.y;
+                } else {
+                    selected_object_id[0] = '\0';
+                    GoInamateClearSelection();
+                }
+            }
+
+            // Rect tool: start drawing
             if (tool == TOOL_RECT && igIsMouseClicked_Bool(ImGuiMouseButton_Left, false)) {
                 is_drawing_rect = true;
                 rect_draw_start.x = scene_x;
@@ -211,6 +239,20 @@ void ui_canvas(bool *open) {
                 ry = rect_draw_start.y - 50;
             }
             GoInamateCreateRect(rx, ry, rw, rh);
+        }
+
+        // Select tool: drag to move selected object
+        if (is_dragging_selection) {
+            if (igIsMouseDragging(ImGuiMouseButton_Left, 2.0f)) {
+                float new_x = drag_initial_x + (scene_x - drag_start_scene.x);
+                float new_y = drag_initial_y + (scene_y - drag_start_scene.y);
+                char json[128];
+                snprintf(json, sizeof(json), "{\"x\":%g,\"y\":%g}", (double)new_x, (double)new_y);
+                GoInamateObjectTransform(selected_object_id, json);
+            }
+            if (igIsMouseReleased_Nil(ImGuiMouseButton_Left)) {
+                is_dragging_selection = false;
+            }
         }
 
         float zoom = canvas_zoom;
@@ -309,6 +351,48 @@ void ui_canvas(bool *open) {
                 ImU32 preview_stroke = INAMATE_COL32(74, 144, 217, 200);
                 ImDrawList_AddRectFilled(dl, min_pt, max_pt, preview_fill, 0, 0);
                 ImDrawList_AddRect(dl, min_pt, max_pt, preview_stroke, 0, 0, 1.5f);
+            }
+
+            // Selection indicator: outline + corner/edge handles
+            if (selected_object_id[0]) {
+                float sel_x, sel_y, sel_w, sel_h;
+                if (GoInamateGetSelectionBounds(&sel_x, &sel_y, &sel_w, &sel_h)) {
+                    ImVec2 smin = {
+                        view_origin.x + sel_x * zoom,
+                        view_origin.y + sel_y * zoom,
+                    };
+                    ImVec2 smax = {
+                        view_origin.x + (sel_x + sel_w) * zoom,
+                        view_origin.y + (sel_y + sel_h) * zoom,
+                    };
+
+                    ImU32 blue = INAMATE_COL32(74, 144, 217, 255);
+                    ImU32 white = INAMATE_COL32(255, 255, 255, 255);
+
+                    // Outer contrast border (dark) then inner selection border (blue)
+                    ImDrawList_AddRect(dl, smin, smax, INAMATE_COL32(0, 0, 0, 80), 0, 0, 3.0f);
+                    ImDrawList_AddRect(dl, smin, smax, blue, 0, 0, 1.5f);
+
+                    // Handle size in screen pixels
+                    float hs = 4.0f;
+                    float mx = (smin.x + smax.x) * 0.5f;
+                    float my = (smin.y + smax.y) * 0.5f;
+
+                    // Corner + edge midpoint positions (8 handles)
+                    ImVec2 handles[8] = {
+                        {smin.x, smin.y}, {smax.x, smin.y},  // TL, TR
+                        {smin.x, smax.y}, {smax.x, smax.y},  // BL, BR
+                        {mx,     smin.y}, {mx,     smax.y},   // T,  B
+                        {smin.x, my},     {smax.x, my},       // L,  R
+                    };
+
+                    for (int h = 0; h < 8; h++) {
+                        ImVec2 hmin = {handles[h].x - hs, handles[h].y - hs};
+                        ImVec2 hmax = {handles[h].x + hs, handles[h].y + hs};
+                        ImDrawList_AddRectFilled(dl, hmin, hmax, white, 0, 0);
+                        ImDrawList_AddRect(dl, hmin, hmax, blue, 0, 0, 1.0f);
+                    }
+                }
             }
 
             if (frame.scene_width > 0 && frame.scene_height > 0) {

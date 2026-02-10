@@ -42,6 +42,9 @@ import (
 var (
 	eng   *engine.Engine
 	engMu sync.Mutex // protects eng across goroutines (C main thread + ws read loop)
+
+	selectedID string
+	selectedMu sync.Mutex
 )
 
 // --- Presence ---
@@ -705,4 +708,188 @@ func GoInamateGetPresences(a *C.Arena) C.InPresenceList {
 		entries: arr,
 		count:   C.int(n),
 	}
+}
+
+// --- Selection / Hit Test API ---
+
+//export GoInamateHitTest
+func GoInamateHitTest(x, y C.float, outID *C.char, outIDLen C.int) C.int {
+	engMu.Lock()
+	id := eng.HitTest(float64(x), float64(y))
+	if id != "" {
+		eng.SetSelection([]string{id})
+	} else {
+		eng.SetSelection(nil)
+	}
+	engMu.Unlock()
+
+	selectedMu.Lock()
+	selectedID = id
+	selectedMu.Unlock()
+
+	if outID != nil && outIDLen > 0 {
+		copyToCharArray(outID, int(outIDLen), id)
+	}
+
+	if id != "" {
+		return 1
+	}
+	return 0
+}
+
+//export GoInamateClearSelection
+func GoInamateClearSelection() {
+	selectedMu.Lock()
+	selectedID = ""
+	selectedMu.Unlock()
+
+	engMu.Lock()
+	eng.SetSelection(nil)
+	engMu.Unlock()
+}
+
+//export GoInamateGetSelectionBounds
+func GoInamateGetSelectionBounds(outX, outY, outW, outH *C.float) C.int {
+	engMu.Lock()
+	boundsJSON := eng.GetSelectionBounds()
+	engMu.Unlock()
+
+	var bounds struct {
+		X      float64 `json:"x"`
+		Y      float64 `json:"y"`
+		Width  float64 `json:"width"`
+		Height float64 `json:"height"`
+	}
+	if err := json.Unmarshal([]byte(boundsJSON), &bounds); err != nil {
+		return 0
+	}
+	if bounds.Width <= 0 || bounds.Height <= 0 {
+		return 0
+	}
+
+	*outX = C.float(bounds.X)
+	*outY = C.float(bounds.Y)
+	*outW = C.float(bounds.Width)
+	*outH = C.float(bounds.Height)
+	return 1
+}
+
+// --- Object Update API ---
+
+//export GoInamateObjectTransform
+func GoInamateObjectTransform(objectID, changesJSON *C.char) C.int {
+	goObjectID := C.GoString(objectID)
+	goChanges := C.GoString(changesJSON)
+
+	ws.mu.Lock()
+	ds := ws.docState
+	connected := ws.connected
+	conn := ws.conn
+	projectID := ws.projectID
+	ws.mu.Unlock()
+
+	if ds == nil {
+		fmt.Println("object.transform: no document state")
+		return -1
+	}
+
+	op := collab.Operation{
+		Type:      "object.transform",
+		ObjectID:  goObjectID,
+		Transform: json.RawMessage(goChanges),
+	}
+
+	if _, err := ds.ApplyOperation(op); err != nil {
+		fmt.Println("object.transform: apply error:", err)
+		return -1
+	}
+
+	docJSON, err := json.Marshal(ds.GetDocument())
+	if err != nil {
+		fmt.Println("object.transform: marshal error:", err)
+		return -1
+	}
+
+	engMu.Lock()
+	if err := eng.UpdateDocument(string(docJSON)); err != nil {
+		fmt.Println("object.transform: engine update error:", err)
+	}
+	engMu.Unlock()
+
+	if connected && conn != nil {
+		payload, err := json.Marshal(op)
+		if err == nil {
+			msg, err := json.Marshal(collab.Message{
+				Type:      collab.TypeOpSubmit,
+				ProjectID: projectID,
+				Payload:   payload,
+			})
+			if err == nil {
+				if err := conn.Write(ws.ctx, websocket.MessageText, msg); err != nil {
+					fmt.Println("object.transform: ws write error:", err)
+				}
+			}
+		}
+	}
+
+	return 0
+}
+
+//export GoInamateObjectStyle
+func GoInamateObjectStyle(objectID, changesJSON *C.char) C.int {
+	goObjectID := C.GoString(objectID)
+	goChanges := C.GoString(changesJSON)
+
+	ws.mu.Lock()
+	ds := ws.docState
+	connected := ws.connected
+	conn := ws.conn
+	projectID := ws.projectID
+	ws.mu.Unlock()
+
+	if ds == nil {
+		fmt.Println("object.style: no document state")
+		return -1
+	}
+
+	op := collab.Operation{
+		Type:     "object.style",
+		ObjectID: goObjectID,
+		Style:    json.RawMessage(goChanges),
+	}
+
+	if _, err := ds.ApplyOperation(op); err != nil {
+		fmt.Println("object.style: apply error:", err)
+		return -1
+	}
+
+	docJSON, err := json.Marshal(ds.GetDocument())
+	if err != nil {
+		fmt.Println("object.style: marshal error:", err)
+		return -1
+	}
+
+	engMu.Lock()
+	if err := eng.UpdateDocument(string(docJSON)); err != nil {
+		fmt.Println("object.style: engine update error:", err)
+	}
+	engMu.Unlock()
+
+	if connected && conn != nil {
+		payload, err := json.Marshal(op)
+		if err == nil {
+			msg, err := json.Marshal(collab.Message{
+				Type:      collab.TypeOpSubmit,
+				ProjectID: projectID,
+				Payload:   payload,
+			})
+			if err == nil {
+				if err := conn.Write(ws.ctx, websocket.MessageText, msg); err != nil {
+					fmt.Println("object.style: ws write error:", err)
+				}
+			}
+		}
+	}
+
+	return 0
 }
