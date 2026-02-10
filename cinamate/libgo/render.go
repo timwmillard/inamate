@@ -6,8 +6,7 @@ package main
 
 #ifndef ARENA_FWD_DECL_
 #define ARENA_FWD_DECL_
-typedef struct Region Region;
-typedef struct { Region *begin, *end; } Arena;
+typedef struct Arena Arena;
 extern void *arena_alloc(Arena *a, size_t size_bytes);
 #endif
 
