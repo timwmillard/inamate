@@ -88,7 +88,8 @@ add_definitions(${BACKEND})
 
 add_executable(${PROJECT_NAME}
     src/main.c
-    src/ui_window.c
+    src/window.c
+    src/canvas.c
     deps/deps.c
     deps/deps.cpp
     deps/cimgui/cimgui.cpp
