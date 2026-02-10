@@ -104,7 +104,7 @@ void init(void)
     // Add font - sokol_imgui 1.92+ handles atlas texture automatically
     void *font_data = malloc(Roboto_Regular_ttf_len);
     memcpy(font_data, Roboto_Regular_ttf_data, Roboto_Regular_ttf_len);
-    ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, font_data, Roboto_Regular_ttf_len, 20.0f, font_cfg, NULL);
+    ImFontAtlas_AddFontFromMemoryTTF(io->Fonts, font_data, Roboto_Regular_ttf_len, 16.0f, font_cfg, NULL);
 
     ImFontConfig_destroy(font_cfg);
 
