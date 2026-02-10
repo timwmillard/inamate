@@ -238,75 +238,75 @@ static void ui_object_properties(const char *sel_id)
     }
     section_end();
 
-    if (igCollapsingHeader_TreeNodeFlags("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (begin_prop_table()) {
-            PROP_ROW_BEGIN("X");
-            igDragFloat("##x", &props.pos_x, 1.0f, 0.0f, 0.0f, "%.1f", 0);
-            if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "x", props.pos_x);
+    section_heading("Transform");
+    if (begin_prop_table()) {
+        PROP_ROW_BEGIN("X");
+        igDragFloat("##x", &props.pos_x, 1.0f, 0.0f, 0.0f, "%.1f", 0);
+        if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "x", props.pos_x);
 
-            PROP_ROW_BEGIN("Y");
-            igDragFloat("##y", &props.pos_y, 1.0f, 0.0f, 0.0f, "%.1f", 0);
-            if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "y", props.pos_y);
+        PROP_ROW_BEGIN("Y");
+        igDragFloat("##y", &props.pos_y, 1.0f, 0.0f, 0.0f, "%.1f", 0);
+        if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "y", props.pos_y);
 
-            PROP_ROW_BEGIN("Scale X");
-            igDragFloat("##sx", &props.scale_x, 0.01f, 0.0f, 0.0f, "%.2f", 0);
-            if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "sx", props.scale_x);
+        PROP_ROW_BEGIN("Scale X");
+        igDragFloat("##sx", &props.scale_x, 0.01f, 0.0f, 0.0f, "%.2f", 0);
+        if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "sx", props.scale_x);
 
-            PROP_ROW_BEGIN("Scale Y");
-            igDragFloat("##sy", &props.scale_y, 0.01f, 0.0f, 0.0f, "%.2f", 0);
-            if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "sy", props.scale_y);
+        PROP_ROW_BEGIN("Scale Y");
+        igDragFloat("##sy", &props.scale_y, 0.01f, 0.0f, 0.0f, "%.2f", 0);
+        if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "sy", props.scale_y);
 
-            PROP_ROW_BEGIN("Rotation");
-            igDragFloat("##rot", &props.rotation, 1.0f, 0.0f, 0.0f, "%.1f", 0);
-            if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "r", props.rotation);
+        PROP_ROW_BEGIN("Rotation");
+        igDragFloat("##rot", &props.rotation, 1.0f, 0.0f, 0.0f, "%.1f", 0);
+        if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "r", props.rotation);
 
-            PROP_ROW_BEGIN("Skew X");
-            igDragFloat("##skx", &props.skew_x, 1.0f, 0.0f, 0.0f, "%.1f", 0);
-            if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "skewX", props.skew_x);
+        PROP_ROW_BEGIN("Skew X");
+        igDragFloat("##skx", &props.skew_x, 1.0f, 0.0f, 0.0f, "%.1f", 0);
+        if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "skewX", props.skew_x);
 
-            PROP_ROW_BEGIN("Skew Y");
-            igDragFloat("##sky", &props.skew_y, 1.0f, 0.0f, 0.0f, "%.1f", 0);
-            if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "skewY", props.skew_y);
+        PROP_ROW_BEGIN("Skew Y");
+        igDragFloat("##sky", &props.skew_y, 1.0f, 0.0f, 0.0f, "%.1f", 0);
+        if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "skewY", props.skew_y);
 
-            PROP_ROW_BEGIN("Anchor X");
-            igDragFloat("##ax", &props.anchor_x, 0.01f, 0.0f, 0.0f, "%.2f", 0);
-            if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "ax", props.anchor_x);
+        PROP_ROW_BEGIN("Anchor X");
+        igDragFloat("##ax", &props.anchor_x, 0.01f, 0.0f, 0.0f, "%.2f", 0);
+        if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "ax", props.anchor_x);
 
-            PROP_ROW_BEGIN("Anchor Y");
-            igDragFloat("##ay", &props.anchor_y, 0.01f, 0.0f, 0.0f, "%.2f", 0);
-            if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "ay", props.anchor_y);
+        PROP_ROW_BEGIN("Anchor Y");
+        igDragFloat("##ay", &props.anchor_y, 0.01f, 0.0f, 0.0f, "%.2f", 0);
+        if (igIsItemDeactivatedAfterEdit()) send_transform(sel_id, "ay", props.anchor_y);
 
-            end_prop_table();
-        }
+        end_prop_table();
     }
+    section_end();
 
-    if (igCollapsingHeader_TreeNodeFlags("Style", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (begin_prop_table()) {
-            PROP_ROW_BEGIN("Fill");
-            if (igColorEdit3("##fill", props.fill, ImGuiColorEditFlags_DisplayHex)) {
-                char hex[16];
-                float3_to_hex(props.fill, hex);
-                send_style_str(sel_id, "fill", hex);
-            }
-
-            PROP_ROW_BEGIN("Stroke");
-            if (igColorEdit3("##stroke", props.stroke, ImGuiColorEditFlags_DisplayHex)) {
-                char hex[16];
-                float3_to_hex(props.stroke, hex);
-                send_style_str(sel_id, "stroke", hex);
-            }
-
-            PROP_ROW_BEGIN("Stroke W");
-            igDragFloat("##strokew", &props.stroke_width, 0.1f, 0.0f, 0.0f, "%.1f", 0);
-            if (igIsItemDeactivatedAfterEdit()) send_style_float(sel_id, "strokeWidth", props.stroke_width);
-
-            PROP_ROW_BEGIN("Opacity");
-            igDragFloat("##opacity", &props.opacity, 1.0f, 0.0f, 100.0f, "%.0f%%", 0);
-            if (igIsItemDeactivatedAfterEdit()) send_style_float(sel_id, "opacity", props.opacity / 100.0f);
-
-            end_prop_table();
+    section_heading("Style");
+    if (begin_prop_table()) {
+        PROP_ROW_BEGIN("Fill");
+        if (igColorEdit3("##fill", props.fill, ImGuiColorEditFlags_DisplayHex)) {
+            char hex[16];
+            float3_to_hex(props.fill, hex);
+            send_style_str(sel_id, "fill", hex);
         }
+
+        PROP_ROW_BEGIN("Stroke");
+        if (igColorEdit3("##stroke", props.stroke, ImGuiColorEditFlags_DisplayHex)) {
+            char hex[16];
+            float3_to_hex(props.stroke, hex);
+            send_style_str(sel_id, "stroke", hex);
+        }
+
+        PROP_ROW_BEGIN("Stroke W");
+        igDragFloat("##strokew", &props.stroke_width, 0.1f, 0.0f, 0.0f, "%.1f", 0);
+        if (igIsItemDeactivatedAfterEdit()) send_style_float(sel_id, "strokeWidth", props.stroke_width);
+
+        PROP_ROW_BEGIN("Opacity");
+        igDragFloat("##opacity", &props.opacity, 1.0f, 0.0f, 100.0f, "%.0f%%", 0);
+        if (igIsItemDeactivatedAfterEdit()) send_style_float(sel_id, "opacity", props.opacity / 100.0f);
+
+        end_prop_table();
     }
+    section_end();
 }
 
 void ui_properties(bool *open)
