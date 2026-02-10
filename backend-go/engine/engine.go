@@ -285,6 +285,7 @@ func (e *Engine) GetSelectionBounds() string {
 // SceneInfo holds scene metadata for direct access (no JSON).
 type SceneInfo struct {
 	ID         string
+	Name       string
 	Width      int
 	Height     int
 	Background string
@@ -301,6 +302,7 @@ func (e *Engine) GetSceneInfo() SceneInfo {
 	}
 	return SceneInfo{
 		ID:         e.sceneID,
+		Name:       scene.Name,
 		Width:      scene.Width,
 		Height:     scene.Height,
 		Background: scene.Background,

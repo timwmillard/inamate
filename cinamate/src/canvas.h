@@ -7,6 +7,7 @@
 
 typedef struct {
     char scene_id[64];
+    char scene_name[128];
     char background[16];
     int scene_width;
     int scene_height;

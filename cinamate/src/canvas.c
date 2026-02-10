@@ -235,6 +235,7 @@ void ui_canvas(bool *open) {
 
             // Cache scene info for properties panel
             memcpy(last_scene_info.scene_id, frame.scene_id, 64);
+            memcpy(last_scene_info.scene_name, frame.scene_name, 128);
             memcpy(last_scene_info.background, frame.background, 16);
             last_scene_info.scene_width = frame.scene_width;
             last_scene_info.scene_height = frame.scene_height;

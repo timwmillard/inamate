@@ -35,6 +35,7 @@ typedef struct {
     InDrawCmd *commands;
     int count;
     char scene_id[64];
+    char scene_name[128];
     char background[16];  // scene background hex color
     int scene_width;
     int scene_height;
@@ -133,6 +134,7 @@ func GoInamateEngineRenderFrame(a *C.Arena) C.InDrawFrame {
 	if n == 0 {
 		var frame C.InDrawFrame
 		copyToCharArray(&frame.scene_id[0], 64, scene.ID)
+		copyToCharArray(&frame.scene_name[0], 128, scene.Name)
 		copyToCharArray(&frame.background[0], 16, scene.Background)
 		frame.scene_width = C.int(scene.Width)
 		frame.scene_height = C.int(scene.Height)
@@ -169,6 +171,7 @@ func GoInamateEngineRenderFrame(a *C.Arena) C.InDrawFrame {
 	frame.commands = arr
 	frame.count = C.int(n)
 	copyToCharArray(&frame.scene_id[0], 64, scene.ID)
+	copyToCharArray(&frame.scene_name[0], 128, scene.Name)
 	copyToCharArray(&frame.background[0], 16, scene.Background)
 	frame.scene_width = C.int(scene.Width)
 	frame.scene_height = C.int(scene.Height)

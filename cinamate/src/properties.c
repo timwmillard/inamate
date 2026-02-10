@@ -71,15 +71,37 @@ static void end_prop_table(void)
     igEndTable();
 }
 
+// Helper to send a scene.update JSON change to the engine + collab
+static void send_scene_update(const char *scene_id, const char *changes_json) {
+    GoInamateSceneUpdate((char *)scene_id, (char *)changes_json);
+}
+
 static void ui_scene_properties(void)
 {
+    const CanvasSceneInfo *si = ui_canvas_get_scene_info();
+
     igText("Artboard");
     igSeparator();
+
+    // Sync scene info from engine each frame (when not actively editing)
+    if (!igIsAnyItemActive()) {
+        if (si->scene_name[0]) {
+            strncpy(props.scene_name, si->scene_name, sizeof(props.scene_name) - 1);
+            props.scene_name[sizeof(props.scene_name) - 1] = '\0';
+        }
+        props.scene_width = si->scene_width;
+        props.scene_height = si->scene_height;
+    }
 
     if (igCollapsingHeader_TreeNodeFlags("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (begin_prop_table()) {
             PROP_ROW_BEGIN("Name");
             igInputText("##name", props.scene_name, sizeof(props.scene_name), 0, NULL, NULL);
+            if (igIsItemDeactivatedAfterEdit()) {
+                char changes[256];
+                snprintf(changes, sizeof(changes), "{\"name\":\"%s\"}", props.scene_name);
+                send_scene_update(si->scene_id, changes);
+            }
             end_prop_table();
         }
     }
@@ -88,16 +110,26 @@ static void ui_scene_properties(void)
         if (begin_prop_table()) {
             PROP_ROW_BEGIN("Width");
             igInputInt("##width", &props.scene_width, 1, 10, 0);
+            if (igIsItemDeactivatedAfterEdit()) {
+                if (props.scene_width < 1) props.scene_width = 1;
+                char changes[64];
+                snprintf(changes, sizeof(changes), "{\"width\":%d}", props.scene_width);
+                send_scene_update(si->scene_id, changes);
+            }
             PROP_ROW_BEGIN("Height");
             igInputInt("##height", &props.scene_height, 1, 10, 0);
+            if (igIsItemDeactivatedAfterEdit()) {
+                if (props.scene_height < 1) props.scene_height = 1;
+                char changes[64];
+                snprintf(changes, sizeof(changes), "{\"height\":%d}", props.scene_height);
+                send_scene_update(si->scene_id, changes);
+            }
             end_prop_table();
         }
     }
 
     if (igCollapsingHeader_TreeNodeFlags("Background", ImGuiTreeNodeFlags_DefaultOpen)) {
         if (begin_prop_table()) {
-            // Sync from engine scene info each frame
-            const CanvasSceneInfo *si = ui_canvas_get_scene_info();
             if (si->background[0] == '#' && strlen(si->background) >= 7) {
                 unsigned int r, g, b;
                 sscanf(si->background + 1, "%02x%02x%02x", &r, &g, &b);
@@ -108,7 +140,6 @@ static void ui_scene_properties(void)
 
             PROP_ROW_BEGIN("Color");
             if (igColorEdit3("##bg_color", props.scene_bg, ImGuiColorEditFlags_DisplayHex)) {
-                // User changed color — convert back to hex and send scene.update
                 int cr = (int)(props.scene_bg[0] * 255.0f + 0.5f);
                 int cg = (int)(props.scene_bg[1] * 255.0f + 0.5f);
                 int cb = (int)(props.scene_bg[2] * 255.0f + 0.5f);
@@ -120,7 +151,7 @@ static void ui_scene_properties(void)
                 char changes[64];
                 snprintf(changes, sizeof(changes), "{\"background\":\"%s\"}", hex);
 
-                GoInamateSceneUpdate((char *)si->scene_id, changes);
+                send_scene_update(si->scene_id, changes);
             }
             end_prop_table();
         }
