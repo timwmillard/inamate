@@ -41,8 +41,9 @@ typedef enum {
 
 static bool is_resizing = false;
 static HandleType resize_handle = HANDLE_NONE;
-static float resize_init_left, resize_init_top;
-static float resize_init_right, resize_init_bottom;
+static float resize_init_rotation;     // radians
+static float resize_init_obj_x, resize_init_obj_y;
+static float resize_init_local_hw, resize_init_local_hh; // half-width/height in local space
 static char resize_obj_type[32] = {0};
 
 // Pack RGBA into ImU32 (ImGui's ABGR byte order)
@@ -280,14 +281,15 @@ void ui_canvas(bool *open) {
                         if (clicked_handle != HANDLE_NONE) {
                             is_resizing = true;
                             resize_handle = clicked_handle;
-                            resize_init_left = sel_x;
-                            resize_init_top = sel_y;
-                            resize_init_right = sel_x + sel_w;
-                            resize_init_bottom = sel_y + sel_h;
                             drag_start_scene = (ImVec2){scene_x, scene_y};
                             InObjectInfo rinfo = GoInamateGetSelectedObject();
                             strncpy(resize_obj_type, rinfo.type, sizeof(resize_obj_type) - 1);
                             resize_obj_type[sizeof(resize_obj_type) - 1] = '\0';
+                            resize_init_rotation = rinfo.r * (float)M_PI / 180.0f;
+                            resize_init_obj_x = rinfo.x;
+                            resize_init_obj_y = rinfo.y;
+                            resize_init_local_hw = rinfo.data_width * 0.5f;
+                            resize_init_local_hh = rinfo.data_height * 0.5f;
                         }
                     }
                 }
@@ -411,7 +413,7 @@ void ui_canvas(bool *open) {
             }
         }
 
-        // Select tool: resize by dragging handles
+        // Select tool: resize by dragging handles (works in object-local space)
         if (is_resizing) {
             // Set resize cursor during drag
             ImGuiMouseCursor rc[] = {
@@ -427,23 +429,30 @@ void ui_canvas(bool *open) {
             if (resize_handle >= 0 && resize_handle < 8)
                 igSetMouseCursor(rc[resize_handle]);
 
-            float dx = scene_x - drag_start_scene.x;
-            float dy = scene_y - drag_start_scene.y;
+            float scene_dx = scene_x - drag_start_scene.x;
+            float scene_dy = scene_y - drag_start_scene.y;
 
-            float new_left   = resize_init_left;
-            float new_top    = resize_init_top;
-            float new_right  = resize_init_right;
-            float new_bottom = resize_init_bottom;
+            // Rotate mouse delta into object-local coordinate space
+            float cos_neg = cosf(-resize_init_rotation);
+            float sin_neg = sinf(-resize_init_rotation);
+            float local_dx = cos_neg * scene_dx - sin_neg * scene_dy;
+            float local_dy = sin_neg * scene_dx + cos_neg * scene_dy;
+
+            // Local-space edges (centered on object origin)
+            float new_left   = -resize_init_local_hw;
+            float new_top    = -resize_init_local_hh;
+            float new_right  =  resize_init_local_hw;
+            float new_bottom =  resize_init_local_hh;
 
             switch (resize_handle) {
-            case HANDLE_TL: new_left += dx; new_top += dy; break;
-            case HANDLE_TR: new_right += dx; new_top += dy; break;
-            case HANDLE_BL: new_left += dx; new_bottom += dy; break;
-            case HANDLE_BR: new_right += dx; new_bottom += dy; break;
-            case HANDLE_T:  new_top += dy; break;
-            case HANDLE_B:  new_bottom += dy; break;
-            case HANDLE_L:  new_left += dx; break;
-            case HANDLE_R:  new_right += dx; break;
+            case HANDLE_TL: new_left += local_dx; new_top += local_dy; break;
+            case HANDLE_TR: new_right += local_dx; new_top += local_dy; break;
+            case HANDLE_BL: new_left += local_dx; new_bottom += local_dy; break;
+            case HANDLE_BR: new_right += local_dx; new_bottom += local_dy; break;
+            case HANDLE_T:  new_top += local_dy; break;
+            case HANDLE_B:  new_bottom += local_dy; break;
+            case HANDLE_L:  new_left += local_dx; break;
+            case HANDLE_R:  new_right += local_dx; break;
             default: break;
             }
 
@@ -464,17 +473,24 @@ void ui_canvas(bool *open) {
 
             float new_w = new_right - new_left;
             float new_h = new_bottom - new_top;
-            float new_cx = new_left + new_w * 0.5f;
-            float new_cy = new_top + new_h * 0.5f;
+
+            // Center shift in local space (edges may have moved asymmetrically)
+            float local_cx = (new_left + new_right) * 0.5f;
+            float local_cy = (new_top + new_bottom) * 0.5f;
+
+            // Rotate center shift back to scene space
+            float cos_pos = cosf(resize_init_rotation);
+            float sin_pos = sinf(resize_init_rotation);
+            float new_x = resize_init_obj_x + cos_pos * local_cx - sin_pos * local_cy;
+            float new_y = resize_init_obj_y + sin_pos * local_cx + cos_pos * local_cy;
 
             bool is_ellipse = (strcmp(resize_obj_type, "ShapeEllipse") == 0);
 
             if (is_ellipse) {
-                // Ellipse: anchor stays 0,0; data uses rx/ry
                 char t_json[128];
                 snprintf(t_json, sizeof(t_json),
                     "{\"x\":%g,\"y\":%g}",
-                    (double)new_cx, (double)new_cy);
+                    (double)new_x, (double)new_y);
                 GoInamateObjectTransform(selected_object_id, t_json);
 
                 char d_json[128];
@@ -483,14 +499,13 @@ void ui_canvas(bool *open) {
                     (double)(new_w * 0.5f), (double)(new_h * 0.5f));
                 GoInamateObjectData(selected_object_id, d_json);
             } else {
-                // Rect (and others): anchor = half-size; data uses width/height
                 float new_ax = new_w * 0.5f;
                 float new_ay = new_h * 0.5f;
 
                 char t_json[256];
                 snprintf(t_json, sizeof(t_json),
                     "{\"x\":%g,\"y\":%g,\"ax\":%g,\"ay\":%g}",
-                    (double)new_cx, (double)new_cy, (double)new_ax, (double)new_ay);
+                    (double)new_x, (double)new_y, (double)new_ax, (double)new_ay);
                 GoInamateObjectTransform(selected_object_id, t_json);
 
                 char d_json[128];

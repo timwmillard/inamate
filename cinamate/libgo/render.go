@@ -238,15 +238,25 @@ func GoInamateGetSelectedObject() C.InObjectInfo {
 	info.stroke_width = C.float(obj.Style.StrokeWidth)
 	info.opacity = C.float(obj.Style.Opacity)
 
-	// Parse data for width/height (ShapeRect)
+	// Parse data for width/height (ShapeRect) or rx/ry (ShapeEllipse)
 	if len(obj.Data) > 0 {
 		var data struct {
 			Width  float64 `json:"width"`
 			Height float64 `json:"height"`
+			RX     float64 `json:"rx"`
+			RY     float64 `json:"ry"`
 		}
 		if json.Unmarshal(obj.Data, &data) == nil {
-			info.data_width = C.float(data.Width)
-			info.data_height = C.float(data.Height)
+			if data.Width > 0 {
+				info.data_width = C.float(data.Width)
+			} else if data.RX > 0 {
+				info.data_width = C.float(data.RX * 2)
+			}
+			if data.Height > 0 {
+				info.data_height = C.float(data.Height)
+			} else if data.RY > 0 {
+				info.data_height = C.float(data.RY * 2)
+			}
 		}
 	}
 
