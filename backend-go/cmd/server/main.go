@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -161,10 +162,36 @@ func main() {
 		handleWebSocket(w, r, hub, authService, queries, wsOriginPatterns)
 	})
 
+	// Serve frontend static files: wrap router so static files take priority,
+	// with SPA fallback to index.html for unknown routes.
+	var handler http.Handler = r
+	if cfg.StaticDir != "" {
+		staticFS := os.DirFS(cfg.StaticDir)
+		fileServer := http.FileServer(http.Dir(cfg.StaticDir))
+
+		// SPA fallback: any route the mux doesn't handle serves index.html
+		r.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFile(w, r, cfg.StaticDir+"/index.html")
+		})
+
+		// Wrapper: serve static file if it exists on disk, otherwise fall through to router
+		handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			path := strings.TrimPrefix(req.URL.Path, "/")
+			if path != "" {
+				if _, err := fs.Stat(staticFS, path); err == nil {
+					fileServer.ServeHTTP(w, req)
+					return
+				}
+			}
+			r.ServeHTTP(w, req)
+		})
+		slog.Info("serving static files", "dir", cfg.StaticDir)
+	}
+
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	srv := &http.Server{
 		Addr:         addr,
-		Handler:      r,
+		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 120 * time.Second,
 		IdleTimeout:  60 * time.Second,

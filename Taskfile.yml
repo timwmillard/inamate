@@ -52,6 +52,14 @@ tasks:
     cmds:
       - go run ./cmd/server
 
+  backend:static:
+    desc: Run backend serving frontend/dist as static files
+    dir: backend-go
+    env:
+      STATIC_DIR: ../frontend/dist
+    cmds:
+      - go run ./cmd/server
+
   backend:build:
     desc: Build the Go backend binary
     dir: backend-go

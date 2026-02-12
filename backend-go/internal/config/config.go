@@ -11,6 +11,7 @@ type Config struct {
 	AssetDir       string `envconfig:"ASSET_DIR" default:"./data/assets"`
 	FfmpegPath     string `envconfig:"FFMPEG_PATH" default:"ffmpeg"`
 	AllowedOrigins string `envconfig:"ALLOWED_ORIGINS" default:"http://localhost:5173,http://localhost:3000"`
+	StaticDir      string `envconfig:"STATIC_DIR" default:""`
 }
 
 func Load() (*Config, error) {
